@@ -1,0 +1,114 @@
+/* Lobi design system — shadcn/Tailwind v4 tokens over a playful "game night"
+   palette: friendly indigo primary, candy player colors, generous radii.
+
+   Fonts are SYSTEM STACKS ONLY (nothing external, nothing self-hosted): the
+   UI reads in the platform sans, lobby codes and boards reach for the
+   platform mono. Light and dark follow prefers-color-scheme — the tokens
+   flip in the media query below, and Tailwind's default `dark:` variant
+   (media-based; no `.dark` class override here) agrees with them. */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --color-player-one: var(--player-one);
+  --color-player-two: var(--player-two);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Daylight table (light): chalk white, deep ink, indigo accent. */
+:root {
+  --background: hsl(228 40% 98%);
+  --foreground: hsl(232 24% 14%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(232 24% 14%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(232 24% 14%);
+  --primary: hsl(243 62% 52%);
+  --primary-foreground: hsl(228 40% 98%);
+  --secondary: hsl(228 30% 92%);
+  --secondary-foreground: hsl(232 22% 20%);
+  --muted: hsl(228 28% 93%);
+  --muted-foreground: hsl(230 12% 44%);
+  --accent: hsl(238 44% 90%);
+  --accent-foreground: hsl(240 30% 22%);
+  --destructive: hsl(354 70% 47%);
+  --border: hsl(228 22% 87%);
+  --input: hsl(228 20% 82%);
+  --ring: hsl(243 62% 58%);
+  --player-one: hsl(199 89% 42%);
+  --player-two: hsl(350 78% 52%);
+  --radius: 0.75rem;
+  color-scheme: light dark;
+}
+
+/* Game night (dark): near-black felt, glowing accents. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: hsl(233 20% 9%);
+    --foreground: hsl(228 24% 88%);
+    --card: hsl(233 18% 12%);
+    --card-foreground: hsl(228 24% 88%);
+    --popover: hsl(233 18% 12%);
+    --popover-foreground: hsl(228 24% 88%);
+    --primary: hsl(243 82% 74%);
+    --primary-foreground: hsl(235 24% 12%);
+    --secondary: hsl(233 14% 18%);
+    --secondary-foreground: hsl(228 24% 88%);
+    --muted: hsl(233 14% 16%);
+    --muted-foreground: hsl(230 10% 60%);
+    --accent: hsl(240 16% 21%);
+    --accent-foreground: hsl(228 30% 92%);
+    --destructive: hsl(354 80% 64%);
+    --border: hsl(233 12% 21%);
+    --input: hsl(233 12% 26%);
+    --ring: hsl(243 60% 66%);
+    --player-one: hsl(199 85% 58%);
+    --player-two: hsl(350 85% 64%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply m-0 bg-background text-foreground antialiased;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 24%, transparent);
+  }
+}

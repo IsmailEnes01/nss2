@@ -1,0 +1,52 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lobi",
+  "compatibility_date": "2025-09-02",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "no_handle_cross_request_promise_resolution"
+  ],
+  "main": "./src/server.ts",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LOBBY_ROOM",
+        "class_name": "LobbyRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["LobbyRoom"]
+    }
+  ],
+  "env": {
+    "production": {
+      // Without an explicit name wrangler would deploy a separate
+      // "lobi-production" worker.
+      "name": "lobi",
+      "workers_dev": false,
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "LOBBY_ROOM",
+            "class_name": "LobbyRoom"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_sqlite_classes": ["LobbyRoom"]
+        }
+      ]
+      // Add a custom-domain route here when the domain is wired:
+      // "routes": [{ "pattern": "example.com", "custom_domain": true }]
+    }
+  }
+}
