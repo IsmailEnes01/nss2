@@ -64,12 +64,19 @@ allowed.
 Games are pure and deterministic; the lobby is game-agnostic.
 
 - `entities/game` owns the contract: `GameDef<S, M>` = `meta` (id, Turkish
-  display name, icon, tagline, `minPlayers`/`maxPlayers`) + `init(seed,
-  playerCount)` + `applyMove(state, move, player)` + `status(state)` +
-  `turn(state)` + `playerLabel(index)`; plus the shared `BoardProps<S, M>`
-  every board component receives (`state`, `me: PlayerIndex`, `canMove`,
-  `onMove(m)`). `PlayerIndex` is a plain 0-based seat number, not a fixed
-  `0 | 1` — `maxPlayers` can be as high as 16.
+  display name, icon, tagline, `minPlayers`/`maxPlayers`, optional
+  `settings: GameSettingField[]`) + `init(seed, playerCount, settings?)` +
+  `applyMove(state, move, player)` + `status(state)` + `turn(state)` +
+  `playerLabel(index)`; plus the shared `BoardProps<S, M>` every board
+  component receives (`state`, `me: PlayerIndex`, `canMove`, `onMove(m)`).
+  `PlayerIndex` is a plain 0-based seat number, not a fixed `0 | 1` —
+  `maxPlayers` can be as high as 16. `settings` is optional on `init` so
+  every game without `meta.settings` can keep its 2-arg signature — only a
+  game that declares numeric host-configurable knobs (e.g. Spektrum
+  Çarkı's guess countdown) reads the 3rd argument, which the pre-game
+  settings screen renders as one number input per field and threads
+  through `start-match` → `start` → `LobbySessionState.settings` untouched
+  by the room itself.
 - Each game is `features/play-<game>/`: `model/rules.ts` (the pure reducer —
   framework-free, fully unit-tested), `ui/board.tsx` (presentational; receives
   `BoardProps`, never touches the socket), `index.ts` (exports the `GameDef`

@@ -29,7 +29,7 @@ export function useMatch(
       setMatch({
         key: session,
         you: session.you,
-        state: game.init(session.seed, session.names.length),
+        state: game.init(session.seed, session.names.length, session.settings),
       });
     }
   } else if (session.phase !== "peer-left" && match !== null) {

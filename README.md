@@ -1,8 +1,8 @@
 # Lobi 🎮
 
-**Arkadaşlarınla oyna: lobi kur, kodu paylaş, kapış.** Lobi; XOX'tan Sayı
-Tahmini'ne 7 klasik oyunu tarayıcıdan tarayıcıya, hesapsız-kayıtsız oynatan
-bir oyun sitesi. Bir lobiye 16 kişiye kadar katılabilir — host içeri girenler
+**Arkadaşlarınla oyna: lobi kur, kodu paylaş, kapış.** Lobi; XOX'tan Spektrum
+Çarkı'na 8 klasik oyunu tarayıcıdan tarayıcıya, hesapsız-kayıtsız oynatan bir
+oyun sitesi. Bir lobiye 16 kişiye kadar katılabilir — host içeri girenler
 arasından kimin oynayıp kimin izleyeceğini ve hangi oyunun oynanacağını
 lobinin içinden seçer; oyun bitmeden de değiştirebilir. Takma adını yaz, 4
 harflik lobi kodunu arkadaşlarına gönder, oyun başlasın. Lobide, oyun boyunca
@@ -17,6 +17,7 @@ açık kalan bir sohbet paneli de var.
 | Noktalar & Kutular | 2 | Çizgiyi çek, kutuyu kap — kapatan bir tur daha oynar |
 | Adam Asmaca | 2 | Altı yanlıştan önce kelimeyi bul |
 | Sayı Tahmini | 2-16 | 0-100 arası gizli sayıyı ilk bilen kazanır |
+| Spektrum Çarkı | 2-16 | Tek kelimelik ipucuyla takımı gizli noktaya yönlendir |
 
 ## Nasıl çalışır?
 
@@ -83,11 +84,14 @@ Mimari oyun sayısından bağımsız — beşinci adımda site oyunu kendiliğin
 tanır:
 
 1. `src/features/play-<oyun>/model/rules.ts` — saf bir `GameDef` yaz:
-   `init(seed, playerCount)`, `applyMove(durum, hamle, oyuncu)`,
+   `init(seed, playerCount, settings?)`, `applyMove(durum, hamle, oyuncu)`,
    `status(durum)`, `turn(durum)`, `playerLabel(index)`. React yok, soket yok,
    `Math.random()` yok. `meta.minPlayers`/`maxPlayers` iki taraflı sabit
    olabilir (klasik iki kişilik oyun) ya da bir aralık (`2-16` gibi) — lobi
-   "oynayan" işaretli herkesi buna göre koltuklara oturtur.
+   "oynayan" işaretli herkesi buna göre koltuklara oturtur. Oyunun host'un
+   maç öncesi ekranından ayarlayabileceği sayısal bir seçeneği varsa (ör.
+   Spektrum Çarkı'nın tahmin süresi), `meta.settings`'e bir
+   `GameSettingField` ekle — geri kalan oyunlar bu 3. argümanı hiç görmez.
 2. Önce `model/rules.test.ts`: kazanma/beraberlik matrisi, geçersiz hamlelerin
    reddi, seed determinizmi.
 3. `ui/board.tsx` — `BoardProps` alan sunumsal tahta: durumu çiz, `onMove`

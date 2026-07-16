@@ -25,8 +25,12 @@ describe("parseClientMessage", () => {
       t: "select-game",
       gameId: null,
     });
-    expect(parseClientMessage({ t: "start-match" })).toEqual({
+    expect(
+      parseClientMessage({ t: "start-match", settings: { countdownSeconds: 15 } }),
+    ).toEqual({ t: "start-match", settings: { countdownSeconds: 15 } });
+    expect(parseClientMessage({ t: "start-match", settings: {} })).toEqual({
       t: "start-match",
+      settings: {},
     });
     expect(parseClientMessage({ t: "rematch" })).toEqual({ t: "rematch" });
     expect(parseClientMessage({ t: "chat", text: "selam" })).toEqual({
@@ -97,6 +101,25 @@ describe("parseClientMessage", () => {
     expect(parseClientMessage({ t: "select-game" })).toBeNull();
     expect(parseClientMessage({ t: "select-game", gameId: "" })).toBeNull();
     expect(parseClientMessage({ t: "select-game", gameId: 1 })).toBeNull();
+  });
+
+  it("rejects ill-typed start-match settings", () => {
+    expect(parseClientMessage({ t: "start-match" })).toBeNull();
+    expect(
+      parseClientMessage({ t: "start-match", settings: "nope" }),
+    ).toBeNull();
+    expect(
+      parseClientMessage({
+        t: "start-match",
+        settings: { countdownSeconds: "15" },
+      }),
+    ).toBeNull();
+    expect(
+      parseClientMessage({
+        t: "start-match",
+        settings: { countdownSeconds: Number.NaN },
+      }),
+    ).toBeNull();
   });
 
   it("trims, caps, and rejects empty/ill-typed chat text", () => {
@@ -172,6 +195,7 @@ describe("parseServerMessage", () => {
         names: ["Ayşe", "Mehmet", "Derya"],
         you: 2,
         gameId: "sayi-tahmini",
+        settings: {},
       }),
     ).toEqual({
       t: "start",
@@ -179,6 +203,7 @@ describe("parseServerMessage", () => {
       names: ["Ayşe", "Mehmet", "Derya"],
       you: 2,
       gameId: "sayi-tahmini",
+      settings: {},
     });
     expect(
       parseServerMessage({
@@ -187,6 +212,7 @@ describe("parseServerMessage", () => {
         names: ["Ayşe", "Mehmet"],
         you: null,
         gameId: "xox",
+        settings: { countdownSeconds: 20 },
       }),
     ).toEqual({
       t: "start",
@@ -194,6 +220,7 @@ describe("parseServerMessage", () => {
       names: ["Ayşe", "Mehmet"],
       you: null,
       gameId: "xox",
+      settings: { countdownSeconds: 20 },
     });
     expect(
       parseServerMessage({ t: "peer-move", payload: { r: 0 }, from: 3 }),
@@ -261,6 +288,7 @@ describe("parseServerMessage", () => {
       names: ["a", "b"],
       you: 0,
       gameId: "xox",
+      settings: {},
     };
     expect(parseServerMessage(valid)).not.toBeNull();
     expect(parseServerMessage({ ...valid, seed: "1" })).toBeNull();
@@ -274,6 +302,10 @@ describe("parseServerMessage", () => {
     expect(parseServerMessage({ ...valid, gameId: "" })).toBeNull();
     expect(parseServerMessage({ ...valid, gameId: null })).toBeNull();
     expect(parseServerMessage({ ...valid, gameId: 1 })).toBeNull();
+    expect(parseServerMessage({ ...valid, settings: "nope" })).toBeNull();
+    expect(
+      parseServerMessage({ ...valid, settings: { countdownSeconds: "15" } }),
+    ).toBeNull();
   });
 
   it("accepts a names list longer than two for multi-player games", () => {
@@ -283,6 +315,7 @@ describe("parseServerMessage", () => {
       names: Array.from({ length: 10 }, (_, i) => `Oyuncu ${i}`),
       you: 9,
       gameId: "sayi-tahmini",
+      settings: { countdownSeconds: 15 },
     };
     expect(parseServerMessage(many)).toEqual(many);
   });
@@ -326,6 +359,7 @@ describe("parseServerMessage", () => {
         names: ["a", "b"],
         you: 0,
         gameId: "xox",
+        settings: {},
         injected: "nope",
       }),
     ).toEqual({
@@ -334,6 +368,7 @@ describe("parseServerMessage", () => {
       names: ["a", "b"],
       you: 0,
       gameId: "xox",
+      settings: {},
     });
   });
 });

@@ -36,8 +36,10 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
         ? { t: "select-game", gameId }
         : null;
     }
-    case "start-match":
-      return { t: "start-match" };
+    case "start-match": {
+      const settings = parseSettings(value.settings);
+      return settings === null ? null : { t: "start-match", settings };
+    }
     case "rematch":
       return { t: "rematch" };
     case "chat": {
@@ -68,10 +70,12 @@ export function parseServerMessage(value: unknown): ServerMessage | null {
       const names = parseNameList(value.names);
       const you = value.you;
       const gameId = value.gameId;
+      const settings = parseSettings(value.settings);
       if (!isSeed(value.seed) || names === null) return null;
       if (you !== null && !isSeatIndex(you)) return null;
       if (typeof gameId !== "string" || gameId === "") return null;
-      return { t: "start", seed: value.seed, names, you, gameId };
+      if (settings === null) return null;
+      return { t: "start", seed: value.seed, names, you, gameId, settings };
     }
     case "peer-move": {
       const from = value.from;
@@ -139,6 +143,20 @@ function parseRole(value: unknown): Role | null {
   return value === "playing" || value === "spectator" ? value : null;
 }
 
+/** A game's chosen settings values (e.g. Spektrum Çarkı's countdown
+ * seconds) — opaque to the room itself, just a finite record of finite
+ * numbers keyed by whatever `GameSettingField.key`s the game declared. An
+ * empty object is valid (games with no `meta.settings` still send `{}`). */
+function parseSettings(value: unknown): Record<string, number> | null {
+  if (!isRecord(value)) return null;
+  const settings: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
+    settings[key] = raw;
+  }
+  return settings;
+}
+
 function parseRosterMembers(value: unknown): RosterMember[] | null {
   if (!Array.isArray(value)) return null;
   const members: RosterMember[] = [];
@@ -187,7 +205,9 @@ export type ClientMessage =
    * catalog — the DO just stores the id it's given. `null` clears the pick,
    * sending everyone back to the game-select screen. */
   | { t: "select-game"; gameId: string | null }
-  | { t: "start-match" }
+  /** Host-only: `settings` is the game's chosen `GameSettingField` values
+   * (`{}` for a game with none) — the room just relays it in `start`. */
+  | { t: "start-match"; settings: Record<string, number> }
   | { t: "rematch" }
   /** Free-text room chat — allowed from anyone, in any phase; the DO just
    * relays it, same as a peer move. Trimmed and capped at
@@ -212,6 +232,9 @@ export type ServerMessage =
       /** This connection's own seat, or null when spectating. */
       you: number | null;
       gameId: string;
+      /** The host's chosen `GameSettingField` values for this match (`{}`
+       * for a game with none) — opaque to the room, just relayed. */
+      settings: Record<string, number>;
     }
   | { t: "peer-move"; payload: unknown; from: number }
   | { t: "rematch-start"; seed: number }

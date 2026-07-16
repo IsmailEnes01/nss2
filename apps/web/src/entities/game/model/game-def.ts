@@ -15,6 +15,21 @@ export type GameStatus =
   | { kind: "won"; winner: PlayerIndex }
   | { kind: "draw" };
 
+/** One host-configurable numeric knob a game exposes before the match
+ * starts (e.g. Spektrum Çarkı's guess countdown) — the pre-game settings
+ * screen renders one number input per field, seeded from `default`. Games
+ * with nothing to configure just omit `meta.settings` entirely. */
+export interface GameSettingField {
+  /** Key into the `settings` record `init` receives — must be unique within
+   * one game's `meta.settings`. */
+  key: string;
+  /** Turkish UI label. */
+  label: string;
+  min: number;
+  max: number;
+  default: number;
+}
+
 /** Catalog card data. `name` and `tagline` are Turkish UI copy; `icon` is a
  * lucide-react icon name or an emoji — games use emoji for zero coupling.
  * `minPlayers`/`maxPlayers` gate the host's "start" button and tell the
@@ -26,6 +41,9 @@ export interface GameMeta {
   tagline: string;
   minPlayers: number;
   maxPlayers: number;
+  /** Numeric settings the host can tune on the pre-game settings screen —
+   * absent or empty for games with nothing to configure. */
+  settings?: readonly GameSettingField[];
 }
 
 export interface GameDef<S, M> {
@@ -33,8 +51,18 @@ export interface GameDef<S, M> {
   /** Turkish label for a seat (e.g. index 0 → "X", or "Oyuncu 3"). */
   playerLabel(index: PlayerIndex): string;
   /** `playerCount` is how many seats this match actually has (between
-   * `meta.minPlayers` and `meta.maxPlayers`) — fixed-seat games ignore it. */
-  init(seed: number, playerCount: number): S;
+   * `meta.minPlayers` and `meta.maxPlayers`) — fixed-seat games ignore it.
+   * `settings` carries the host's chosen values for `meta.settings` (already
+   * defaulted for any field left untouched); a game that declares no
+   * `meta.settings` just ignores the third argument entirely — optional so
+   * every other game's existing 2-arg `init` (and its tests, which call it
+   * directly) keeps compiling unchanged. `use-match.ts` always passes a real
+   * (possibly empty) object at runtime regardless. */
+  init(
+    seed: number,
+    playerCount: number,
+    settings?: Readonly<Record<string, number>>,
+  ): S;
   /** Next state, or null when the move is invalid (ignored, never thrown). */
   applyMove(state: S, move: M, player: PlayerIndex): S | null;
   status(state: S): GameStatus;

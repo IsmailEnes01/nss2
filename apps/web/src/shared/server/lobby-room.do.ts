@@ -9,34 +9,47 @@ import {
 } from "@/shared/lib/lobby-protocol";
 
 /** What each socket's hibernation attachment carries: its own roster row,
- * plus the room-level game pick (mirrored onto every socket so any one of
- * them can rebuild `this.gameId` after a wake-up). */
+ * the room-level game pick (mirrored onto every socket so any one of them
+ * can rebuild `this.gameId` after a wake-up), and — once a match has
+ * started — this socket's own assigned seat. The seat MUST be persisted
+ * rather than recomputed, because `ctx.getWebSockets()` is not guaranteed
+ * to return sockets in original join order after a hibernation wake-up; a
+ * live index recompute would silently reassign the wrong seat to the wrong
+ * socket and every move it sends afterward would look like it came from
+ * someone else. */
 interface RoomAttachment {
   member: RosterMember;
   gameId: string | null;
+  seat: number | null;
 }
 
 // Game-agnostic relay room — one instance per lobby code (idFromName). Uses
-// the WebSocket Hibernation API: every member (plus the room's current game
-// pick) is mirrored into its socket's attachment so the constructor can
-// rebuild both `this.members` and `this.gameId` after a wake-up.
+// the WebSocket Hibernation API: every member, the room's current game pick,
+// and (once a match is live) the member's own seat are all mirrored into its
+// socket's attachment, so the constructor can rebuild `this.members`,
+// `this.gameId`, and `this.seats` after a wake-up.
 // Up to MAX_MEMBERS people can join a room; each is "playing" or "spectator".
-// A member's seat (0..N-1) is never stored — it's always the member's index
-// among "playing" members in stable roster order, recomputed on demand, so
-// the room needs no extra bookkeeping when roles change. The host arranges
-// roles AND picks the game from inside the room, then explicitly starts the
-// match — the room never auto-starts on a second join, and never starts
-// before a game is chosen. The room never interprets moves; every client
-// runs the same pure reducer over the relayed stream, seeded by the number
-// broadcast in `start`. The DO doesn't know any game's min/max player count
-// (that lives in the client-side GameDef) — `randomize-roles` carries the
-// cap it should respect, and `start-match` only requires a game to be chosen
-// and two or more playing members. `chat` is the one message that ignores
-// phase and host status entirely — it's just relayed to everyone, same as a
-// move, and never stored (no history survives a hibernation wake-up).
+// A member's seat (0..N-1) is assigned once, by `startMatch`, in stable
+// roster order — and persisted, not recomputed, because `ctx.getWebSockets()`
+// doesn't promise original join order survives hibernation (see
+// `RoomAttachment`). The host arranges roles AND picks the game from inside
+// the room, then explicitly starts the match — the room never auto-starts on
+// a second join, and never starts before a game is chosen. The room never
+// interprets moves; every client runs the same pure reducer over the relayed
+// stream, seeded by the number broadcast in `start`. The DO doesn't know any
+// game's min/max player count (that lives in the client-side GameDef) —
+// `randomize-roles` carries the cap it should respect, and `start-match` only
+// requires a game to be chosen and two or more playing members. `chat` is the
+// one message that ignores phase and host status entirely — it's just
+// relayed to everyone, same as a move, and never stored (no history survives
+// a hibernation wake-up).
 export class LobbyRoom extends DurableObject<Env> {
   /** Live sockets → members; restored from attachments after hibernation. */
   private members = new Map<WebSocket, RosterMember>();
+  /** Live sockets → assigned seat, for members who are part of a started
+   * match. Set once by `startMatch` (never recomputed from roster order —
+   * see `RoomAttachment`) and restored from attachments after hibernation. */
+  private seats = new Map<WebSocket, number>();
   /** The host's current game pick — null until `select-game`. Room-level, so
    * it's mirrored into every member's attachment rather than one seat. */
   private gameId: string | null = null;
@@ -48,6 +61,9 @@ export class LobbyRoom extends DurableObject<Env> {
       if (attachment === null) continue;
       this.members.set(ws, attachment.member);
       this.gameId = attachment.gameId;
+      if (attachment.seat !== null && attachment.seat !== undefined) {
+        this.seats.set(ws, attachment.seat);
+      }
     }
   }
 
@@ -116,7 +132,7 @@ export class LobbyRoom extends DurableObject<Env> {
         if (self.isHost) this.selectGame(message.gameId);
         break;
       case "start-match":
-        if (self.isHost) this.startMatch();
+        if (self.isHost) this.startMatch(message.settings);
         break;
       case "rematch":
         if (this.playingCount() >= 2) {
@@ -180,20 +196,28 @@ export class LobbyRoom extends DurableObject<Env> {
 
   /** Host-only: requires a chosen game and two or more playing members;
    * ignored otherwise (the client only shows the button once both hold).
-   * Seats are assigned 0..N-1 in stable roster order. */
-  private startMatch(): void {
+   * Seats are assigned 0..N-1 in stable roster order — and, unlike before,
+   * that assignment is persisted into each socket's attachment right here,
+   * so a later hibernation wake-up can't reshuffle it (see `RoomAttachment`,
+   * `seatOf`). `settings` is the host's chosen `GameSettingField` values —
+   * opaque to the room, just relayed onward so every client's `game.init`
+   * sees the same values. */
+  private startMatch(settings: Record<string, number>): void {
     const gameId = this.gameId;
     if (gameId === null) return;
     const playing = [...this.members].filter(([, m]) => m.role === "playing");
     if (playing.length < 2) return;
     const seed = randomSeed();
     const names = playing.map(([, member]) => member.name);
-    playing.forEach(([ws], seat) => {
-      send(ws, { t: "start", seed, names, you: seat, gameId });
+    this.seats.clear();
+    playing.forEach(([ws, member], seat) => {
+      this.seats.set(ws, seat);
+      this.persist(ws, member);
+      send(ws, { t: "start", seed, names, you: seat, gameId, settings });
     });
     for (const [ws, member] of this.members) {
       if (member.role !== "playing") {
-        send(ws, { t: "start", seed, names, you: null, gameId });
+        send(ws, { t: "start", seed, names, you: null, gameId, settings });
       }
     }
   }
@@ -226,6 +250,7 @@ export class LobbyRoom extends DurableObject<Env> {
     const member = this.members.get(ws);
     if (member === undefined) return; // an explicit leave already ran
     this.members.delete(ws);
+    this.seats.delete(ws);
     if (member.isHost) this.promoteNextHost();
     // A departed playing member only matters once a match is live; the
     // client's reducer ignores peer-left outside the "playing" phase, so
@@ -253,17 +278,14 @@ export class LobbyRoom extends DurableObject<Env> {
     return undefined;
   }
 
-  /** This member's 0-based index among "playing" members in stable roster
-   * order, or null when spectating. Recomputed on demand — cheap at
-   * MAX_MEMBERS scale, and needs no extra state to survive hibernation. */
+  /** This member's assigned seat, or null when spectating (or before any
+   * match has started). Read from `this.seats` — set once by `startMatch`
+   * and persisted into the attachment — rather than recomputed from live
+   * roster order: `ctx.getWebSockets()` doesn't promise original join order
+   * survives a hibernation wake-up, and a recompute here would silently mis-
+   * tag every move from a reshuffled socket as coming from the wrong seat. */
   private seatOf(ws: WebSocket): number | null {
-    let seat = 0;
-    for (const [candidate, member] of this.members) {
-      if (member.role !== "playing") continue;
-      if (candidate === ws) return seat;
-      seat += 1;
-    }
-    return null;
+    return this.seats.get(ws) ?? null;
   }
 
   private playingCount(): number {
@@ -284,10 +306,15 @@ export class LobbyRoom extends DurableObject<Env> {
     this.persist(ws, member);
   }
 
-  /** Mirrors this member plus the room's current game pick into the socket's
-   * attachment — both must survive a hibernation wake-up. */
+  /** Mirrors this member, the room's current game pick, and (once assigned)
+   * this socket's seat into its attachment — all three must survive a
+   * hibernation wake-up. */
   private persist(ws: WebSocket, member: RosterMember): void {
-    const attachment: RoomAttachment = { member, gameId: this.gameId };
+    const attachment: RoomAttachment = {
+      member,
+      gameId: this.gameId,
+      seat: this.seats.get(ws) ?? null,
+    };
     ws.serializeAttachment(attachment);
   }
 }
