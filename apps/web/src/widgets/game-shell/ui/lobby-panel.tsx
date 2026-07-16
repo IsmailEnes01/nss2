@@ -8,6 +8,7 @@
 // owns the session.
 
 import { useEffect, useState } from "react";
+import type { GameSettingField } from "@/entities/game";
 import { isValidLobbyCode, LOBBY_CODE_LENGTH } from "@/shared/lib/lobby-code";
 import type { Role, RosterMember } from "@/shared/lib/lobby-protocol";
 import { cn } from "@/shared/lib/utils";
@@ -243,8 +244,17 @@ export function GameSettingsPanel({
   const playingCount = members.filter(
     (member) => member.role === "playing",
   ).length;
-  const { minPlayers, maxPlayers } = game.def.meta;
+  const { minPlayers, maxPlayers, settings: settingFields } = game.def.meta;
   const canStart = playingCount >= minPlayers && playingCount <= maxPlayers;
+
+  // Local until "Oyunu başlat" — defaults to each field's own `default`, so
+  // a game with no `meta.settings` never touches this at all. Re-seeded
+  // automatically on a game change, since GameSettingsPanel fully
+  // unmounts/remounts between games (GameShell renders GameSelectPanel in
+  // between — see AGENTS.md).
+  const [settingsValues, setSettingsValues] = useState<
+    Record<string, number>
+  >(() => defaultSettingsValues(settingFields));
 
   return (
     <Card className="mx-auto w-full max-w-lg">
@@ -295,6 +305,17 @@ export function GameSettingsPanel({
           ))}
         </ul>
 
+        {settingFields !== undefined && settingFields.length > 0 && (
+          <GameSettingsFields
+            fields={settingFields}
+            values={settingsValues}
+            editable={isHost}
+            onChange={(key, value) =>
+              setSettingsValues((current) => ({ ...current, [key]: value }))
+            }
+          />
+        )}
+
         {isHost ? (
           <div className="flex flex-col gap-2">
             <Button type="button" variant="outline" onClick={onRandomize}>
@@ -304,7 +325,7 @@ export function GameSettingsPanel({
               type="button"
               size="lg"
               disabled={!canStart}
-              onClick={onStart}
+              onClick={() => onStart(settingsValues)}
             >
               Oyunu başlat
             </Button>
@@ -320,6 +341,45 @@ export function GameSettingsPanel({
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+/** One number input per `GameDef.meta.settings` field — host can edit,
+ * guests see the same values read-only so they know what to expect. */
+function GameSettingsFields({
+  fields,
+  values,
+  editable,
+  onChange,
+}: GameSettingsFieldsProps) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-3">
+      <p className="text-xs font-medium text-muted-foreground">
+        Oyun ayarları
+      </p>
+      {fields.map((field) => (
+        <label
+          key={field.key}
+          className="flex items-center justify-between gap-3 text-sm"
+        >
+          <span>{field.label}</span>
+          <Input
+            type="number"
+            min={field.min}
+            max={field.max}
+            value={values[field.key] ?? field.default}
+            disabled={!editable}
+            className="w-20 text-center"
+            onChange={(event) => {
+              const raw = Number(event.target.value);
+              if (Number.isFinite(raw)) {
+                onChange(field.key, clamp(raw, field.min, field.max));
+              }
+            }}
+          />
+        </label>
+      ))}
+    </div>
   );
 }
 
@@ -476,6 +536,21 @@ function buildInviteLink(code: string): string | null {
   return `${window.location.origin}/lobi/${code}`;
 }
 
+/** `{key: default}` for every field — the starting point before the host
+ * touches anything, and the whole value for a game with no settings at all
+ * (an empty object, matching what `startMatch` sends either way). */
+function defaultSettingsValues(
+  fields: readonly GameSettingField[] | undefined,
+): Record<string, number> {
+  const values: Record<string, number> = {};
+  for (const field of fields ?? []) values[field.key] = field.default;
+  return values;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface NicknameGateProps {
@@ -515,8 +590,19 @@ interface GameSettingsPanelProps {
   onRandomize(): void;
   /** Host-only: clears the pick, sending the room back to game-select. */
   onChangeGame(): void;
-  onStart(): void;
+  /** `settings` is this panel's current values for `game.def.meta.settings`
+   * (`{}` for a game with none). */
+  onStart(settings: Record<string, number>): void;
   onLeave(): void;
+}
+
+interface GameSettingsFieldsProps {
+  fields: readonly GameSettingField[];
+  values: Record<string, number>;
+  /** False renders the same inputs disabled — guests can see the host's
+   * chosen values but not change them. */
+  editable: boolean;
+  onChange(key: string, value: number): void;
 }
 
 interface GamePickerProps {

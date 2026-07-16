@@ -47,6 +47,7 @@ const playing: LobbySessionState = {
   names: ["Ayşe", "Kaan"],
   you: 0,
   gameId: GAME_ID,
+  settings: {},
   isHost: true,
 };
 
@@ -56,6 +57,7 @@ const peerLeft: LobbySessionState = {
   names: ["Ayşe", "Kaan"],
   you: 0,
   gameId: GAME_ID,
+  settings: {},
   isHost: true,
 };
 
@@ -113,6 +115,7 @@ describe("reduceSession — happy path", () => {
       names: ["Ayşe", "Kaan"],
       you: 0,
       gameId: GAME_ID,
+      settings: {},
     };
     expect(afterMessage(roster, message)).toEqual(playing);
   });
@@ -125,6 +128,7 @@ describe("reduceSession — happy path", () => {
       names,
       you: 2,
       gameId: "sayi-tahmini",
+      settings: { countdownSeconds: 20 },
     };
     expect(afterMessage(roster, message)).toEqual({
       phase: "playing",
@@ -133,6 +137,7 @@ describe("reduceSession — happy path", () => {
       names,
       you: 2,
       gameId: "sayi-tahmini",
+      settings: { countdownSeconds: 20 },
       isHost: true,
     });
   });
@@ -145,6 +150,7 @@ describe("reduceSession — happy path", () => {
       names: ["Ayşe", "Kaan"],
       you: 1,
       gameId: GAME_ID,
+      settings: {},
     };
     expect(afterMessage(guestRoster, message)).toEqual({
       ...playing,
@@ -160,6 +166,7 @@ describe("reduceSession — happy path", () => {
       names: ["Ayşe", "Kaan"],
       you: null,
       gameId: GAME_ID,
+      settings: {},
     };
     expect(afterMessage(roster, message)).toEqual({ ...playing, you: null });
   });
@@ -179,6 +186,7 @@ describe("reduceSession — happy path", () => {
       names: ["Ayşe", "Derya"],
       you: 0,
       gameId: GAME_ID,
+      settings: {},
     };
     expect(afterMessage(peerLeft, rejoin)).toEqual({
       phase: "playing",
@@ -187,6 +195,7 @@ describe("reduceSession — happy path", () => {
       names: ["Ayşe", "Derya"],
       you: 0,
       gameId: GAME_ID,
+      settings: {},
       isHost: true,
     });
   });
@@ -420,6 +429,7 @@ describe("reduceSession — leaving and retrying", () => {
         names: ["a", "b"],
         you: 1,
         gameId: GAME_ID,
+        settings: {},
       }),
     ).toBe(INITIAL_SESSION_STATE);
   });

@@ -15,6 +15,7 @@ import {
   numberGuessGame,
 } from "@/features/play-number-guess";
 import { RpsBoard, rpsGame } from "@/features/play-rps";
+import { SpectrumBoard, spectrumGame } from "@/features/play-spectrum";
 import { XoxBoard, xoxGame } from "@/features/play-xox";
 import type { ShellGame } from "@/widgets/game-shell";
 
@@ -27,6 +28,7 @@ export const gamesList: readonly ShellGame[] = [
   { def: dotsBoxesGame, Board: DotsBoxesBoard },
   { def: hangmanGame, Board: HangmanBoard },
   { def: numberGuessGame, Board: NumberGuessBoard },
+  { def: spectrumGame, Board: SpectrumBoard },
 ];
 
 export const gamesById: ReadonlyMap<string, ShellGame> = new Map(

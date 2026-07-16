@@ -195,6 +195,7 @@ function applyServerMessage(
             names: message.names,
             you: message.you,
             gameId: message.gameId,
+            settings: message.settings,
             isHost:
               state.phase === "roster"
                 ? (state.members.find((m) => m.id === state.youId)?.isHost ??
@@ -215,6 +216,7 @@ function applyServerMessage(
             names: state.names,
             you: state.you,
             gameId: state.gameId,
+            settings: state.settings,
             isHost: state.isHost,
           }
         : state;
@@ -324,9 +326,10 @@ class LobbySession {
   };
 
   /** Host-only: starts the match once a game is chosen and two or more
-   * members are "playing". */
-  readonly startMatch = (): void => {
-    this.send({ t: "start-match" });
+   * members are "playing". `settings` is the game's chosen
+   * `GameSettingField` values (`{}` for a game with none). */
+  readonly startMatch = (settings: Record<string, number>): void => {
+    this.send({ t: "start-match", settings });
   };
 
   readonly sendRematch = (): void => {
@@ -542,6 +545,9 @@ export type LobbySessionState =
       names: string[];
       you: PlayerIndex | null;
       gameId: string;
+      /** The host's chosen `GameSettingField` values for this match (`{}`
+       * for a game with none) — passed straight through to `game.init`. */
+      settings: Record<string, number>;
       isHost: boolean;
     }
   | {
@@ -550,6 +556,7 @@ export type LobbySessionState =
       names: string[];
       you: PlayerIndex | null;
       gameId: string;
+      settings: Record<string, number>;
       isHost: boolean;
     }
   | { phase: "closed" }
@@ -585,7 +592,9 @@ export interface UseLobbySession {
   randomizeRoles(maxPlaying: number): void;
   /** Host-only: picks (or replaces) the game to play; null clears the pick. */
   selectGame(gameId: string | null): void;
-  startMatch(): void;
+  /** Host-only: `settings` is the game's chosen `GameSettingField` values
+   * (`{}` for a game with none). */
+  startMatch(settings: Record<string, number>): void;
   sendRematch(): void;
   /** Anyone, any phase — trimmed client-side and re-validated by the DO. */
   sendChat(text: string): void;
