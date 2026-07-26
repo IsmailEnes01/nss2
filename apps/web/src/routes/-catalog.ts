@@ -11,6 +11,7 @@ import {
 import { DotsBoxesBoard, dotsBoxesGame } from "@/features/play-dots-boxes";
 import { HangmanBoard, hangmanGame } from "@/features/play-hangman";
 import { HideDigBoard, hideDigGame } from "@/features/play-hide-dig";
+import { KatilKimBoard, katilKimGame } from "@/features/play-katil-kim";
 import {
   NumberGuessBoard,
   numberGuessGame,
@@ -33,6 +34,7 @@ export const gamesList: readonly ShellGame[] = [
   { def: spectrumGame, Board: SpectrumBoard },
   { def: pokerGame, Board: PokerBoard },
   { def: hideDigGame, Board: HideDigBoard },
+  { def: katilKimGame, Board: KatilKimBoard },
 ];
 
 export const gamesById: ReadonlyMap<string, ShellGame> = new Map(

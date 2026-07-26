@@ -178,6 +178,19 @@ export function GameSelectPanel({
 }: GameSelectPanelProps) {
   const isHost =
     members.find((member) => member.id === youId)?.isHost ?? false;
+  // Digits-only, kept as a string so "empty" and "0" stay distinguishable
+  // while typing (both mean "no filter", but only one should show the
+  // placeholder). Parsed per-render rather than stored as a number, so
+  // backspacing to nothing can't strand a stale count.
+  const [playerCountFilter, setPlayerCountFilter] = useState("");
+  const wanted = Number.parseInt(playerCountFilter, 10);
+  const filtering = Number.isInteger(wanted) && wanted > 0;
+  const visibleGames = filtering
+    ? games.filter(
+        ({ def }) =>
+          wanted >= def.meta.minPlayers && wanted <= def.meta.maxPlayers,
+      )
+    : games;
 
   return (
     <Card className="mx-auto w-full max-w-lg">
@@ -208,12 +221,34 @@ export function GameSelectPanel({
           ))}
         </ul>
 
-        <GamePicker
-          games={games}
-          selectedGameId={null}
-          interactive={isHost}
-          onSelect={onSelectGame}
-        />
+        {isHost && (
+          <Input
+            value={playerCountFilter}
+            // Strip everything but digits on the way in, so the value can
+            // never hold something `parseInt` would half-read ("2e3", "1-2").
+            // `inputMode` only hints the mobile keyboard — it isn't a filter.
+            onChange={(event) =>
+              setPlayerCountFilter(event.target.value.replace(/\D/g, ""))
+            }
+            inputMode="numeric"
+            maxLength={2}
+            placeholder="Oyuncu Sayısı"
+            aria-label="Oyuncu sayısına göre filtrele"
+          />
+        )}
+
+        {visibleGames.length > 0 ? (
+          <GamePicker
+            games={visibleGames}
+            selectedGameId={null}
+            interactive={isHost}
+            onSelect={onSelectGame}
+          />
+        ) : (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            {filtering ? `${wanted} kişilik oyun yok.` : "Oyun yok."}
+          </p>
+        )}
 
         <Button variant="outline" onClick={onLeave}>
           Ayrıl
