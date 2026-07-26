@@ -1,22 +1,41 @@
-/* Lobi design system — shadcn/Tailwind v4 tokens over a playful "game night"
-   palette: friendly indigo primary, candy player colors, generous radii.
+/* Lobi design system — shadcn/Tailwind v4 tokens over the "Lobi Midnight"
+   identity from DESIGN.md: near-black navy background, one vivid azure
+   accent reserved for interactive elements, cool slate for secondary text,
+   Space Grotesk for anything that's a UI moment (titles/buttons/badges),
+   Inter for anything you read, JetBrains Mono for codes/counts. This is a
+   single, deliberately dark theme (not OS-light/dark-following anymore) —
+   see DESIGN.md at the repo root for the token source of truth; swap the
+   hex/font values there (then re-derive the HSL values below) to change
+   the identity later.
 
-   Fonts are SYSTEM STACKS ONLY (nothing external, nothing self-hosted): the
-   UI reads in the platform sans, lobby codes and boards reach for the
-   platform mono. Light and dark follow prefers-color-scheme — the tokens
-   flip in the media query below, and Tailwind's default `dark:` variant
-   (media-based; no `.dark` class override here) agrees with them. */
+   Fonts are loaded from Google Fonts via <link> tags in routes/__root.tsx
+   (this reverses an earlier "system stacks only" constraint — a distinct
+   display face is worth the network request for a "unique looking"
+   site). Every stack below still ends in the old system fallback, so the
+   page never blocks on the font request. */
 
 @import "tailwindcss";
 @import "tw-animate-css";
 
 @theme inline {
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
+  --font-display:
+    "Space Grotesk", "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
   --font-mono:
-    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono",
-    monospace;
+    "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --shadow-card:
+    0 20px 40px -24px color-mix(in oklab, var(--primary) 45%, transparent),
+    0 2px 10px -4px rgba(2, 6, 14, 0.7);
+  --shadow-glow-sm:
+    0 0 0 1px color-mix(in oklab, var(--primary) 35%, transparent),
+    0 4px 14px -6px color-mix(in oklab, var(--primary) 45%, transparent);
+  --shadow-glow:
+    0 0 0 1px color-mix(in oklab, var(--primary) 55%, transparent),
+    0 8px 24px -6px color-mix(in oklab, var(--primary) 60%, transparent);
   --color-player-one: var(--player-one);
   --color-player-two: var(--player-two);
   --color-ring: var(--ring);
@@ -46,56 +65,32 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Daylight table (light): chalk white, deep ink, indigo accent. */
+/* Lobi Midnight (single theme): near-black navy, one azure accent. HSL values
+   below are derived from the hex tokens in DESIGN.md — primary/on-tertiary/
+   neutral/etc. map to these shadcn slots as noted per line. */
 :root {
-  --background: hsl(228 40% 98%);
-  --foreground: hsl(232 24% 14%);
-  --card: hsl(0 0% 100%);
-  --card-foreground: hsl(232 24% 14%);
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(232 24% 14%);
-  --primary: hsl(243 62% 52%);
-  --primary-foreground: hsl(228 40% 98%);
-  --secondary: hsl(228 30% 92%);
-  --secondary-foreground: hsl(232 22% 20%);
-  --muted: hsl(228 28% 93%);
-  --muted-foreground: hsl(230 12% 44%);
-  --accent: hsl(238 44% 90%);
-  --accent-foreground: hsl(240 30% 22%);
-  --destructive: hsl(354 70% 47%);
-  --border: hsl(228 22% 87%);
-  --input: hsl(228 20% 82%);
-  --ring: hsl(243 62% 58%);
-  --player-one: hsl(199 89% 42%);
-  --player-two: hsl(350 78% 52%);
-  --radius: 0.75rem;
-  color-scheme: light dark;
-}
-
-/* Game night (dark): near-black felt, glowing accents. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: hsl(233 20% 9%);
-    --foreground: hsl(228 24% 88%);
-    --card: hsl(233 18% 12%);
-    --card-foreground: hsl(228 24% 88%);
-    --popover: hsl(233 18% 12%);
-    --popover-foreground: hsl(228 24% 88%);
-    --primary: hsl(243 82% 74%);
-    --primary-foreground: hsl(235 24% 12%);
-    --secondary: hsl(233 14% 18%);
-    --secondary-foreground: hsl(228 24% 88%);
-    --muted: hsl(233 14% 16%);
-    --muted-foreground: hsl(230 10% 60%);
-    --accent: hsl(240 16% 21%);
-    --accent-foreground: hsl(228 30% 92%);
-    --destructive: hsl(354 80% 64%);
-    --border: hsl(233 12% 21%);
-    --input: hsl(233 12% 26%);
-    --ring: hsl(243 60% 66%);
-    --player-one: hsl(199 85% 58%);
-    --player-two: hsl(350 85% 64%);
-  }
+  --background: hsl(222 48% 5%); /* colors.neutral */
+  --foreground: hsl(219 41% 93%); /* colors.on-primary */
+  --card: hsl(218 41% 11%); /* colors.neutral-container */
+  --card-foreground: hsl(219 41% 93%); /* colors.on-primary */
+  --popover: hsl(218 41% 11%); /* colors.neutral-container */
+  --popover-foreground: hsl(219 41% 93%); /* colors.on-primary */
+  --primary: hsl(217 91% 60%); /* colors.tertiary — the sole interactive accent */
+  --primary-foreground: hsl(218 76% 5%); /* colors.on-tertiary */
+  --secondary: hsl(220 57% 17%); /* colors.primary (deep navy) */
+  --secondary-foreground: hsl(219 41% 93%); /* colors.on-primary */
+  --muted: hsl(220 35% 14%);
+  --muted-foreground: hsl(214 29% 58%); /* colors.secondary */
+  --accent: hsl(217 45% 20%);
+  --accent-foreground: hsl(219 41% 93%); /* colors.on-primary */
+  --destructive: hsl(0 84% 60%); /* colors.danger */
+  --border: hsl(220 30% 18%);
+  --input: hsl(220 28% 22%);
+  --ring: hsl(217 91% 68%);
+  --player-one: hsl(199 85% 58%);
+  --player-two: hsl(350 85% 64%);
+  --radius: 0.875rem; /* rounded.md in DESIGN.md — cards/buttons build on top via rounded-2xl / rounded-full */
+  color-scheme: dark;
 }
 
 @layer base {
@@ -107,6 +102,26 @@
   }
   body {
     @apply m-0 bg-background text-foreground antialiased;
+    /* Ambient "lit from the accent" atmosphere behind every page — a soft
+       azure bloom top-center, a quieter one bottom-right. Fixed so it reads
+       as room lighting rather than scrolling artwork. */
+    background-image:
+      radial-gradient(
+        ellipse 70% 45% at 50% -10%,
+        color-mix(in oklab, var(--primary) 20%, transparent),
+        transparent
+      ),
+      radial-gradient(
+        ellipse 55% 40% at 100% 100%,
+        color-mix(in oklab, var(--secondary) 16%, transparent),
+        transparent
+      );
+    background-attachment: fixed;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-tight;
   }
   ::selection {
     background: color-mix(in oklab, var(--primary) 24%, transparent);

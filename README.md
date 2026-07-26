@@ -1,7 +1,7 @@
 # Lobi 🎮
 
-**Arkadaşlarınla oyna: lobi kur, kodu paylaş, kapış.** Lobi; XOX'tan Sakla
-Kazma'ya 10 klasik oyunu tarayıcıdan tarayıcıya, hesapsız-kayıtsız oynatan bir
+**Arkadaşlarınla oyna: lobi kur, kodu paylaş, kapış.** Lobi; XOX'tan Katil
+Kim'e 11 klasik oyunu tarayıcıdan tarayıcıya, hesapsız-kayıtsız oynatan bir
 oyun sitesi. Bir lobiye 16 kişiye kadar katılabilir — host içeri girenler
 arasından kimin oynayıp kimin izleyeceğini ve hangi oyunun oynanacağını
 lobinin içinden seçer; oyun bitmeden de değiştirebilir. Takma adını yaz, 4
@@ -20,6 +20,7 @@ açık kalan bir sohbet paneli de var.
 | Spektrum Çarkı | 2-16 | Tek kelimelik ipucuyla takımı gizli noktaya yönlendir |
 | Teksas Hold'em | 2-9 | Blöf yap, en iyi eli kur, rakiplerini masadan sil |
 | Sakla Kazma | 2-12 | Bir kareye saklan, rakiplerinkini kaz — kazılan yerde saklanan elenir |
+| Katil Kim | 4-16 | Gizli roller, her gün bir oylama — katilleri bul ya da hepsini avla |
 
 ## Nasıl çalışır?
 

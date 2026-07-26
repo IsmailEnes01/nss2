@@ -2,12 +2,18 @@
 // across every phase past "connecting" — arranging roles, mid-match, after a
 // peer leaves — so messages persist through game switches and rematches;
 // the DO relays chat regardless of phase or host status, so nothing here
-// needs to branch on either. Always expanded at an adjustable footprint (no
-// open/close toggle — narrow enough to sit unobtrusively in the corner
-// without needing to collapse). `fixed`-positioned at the viewport's
+// needs to branch on either. `fixed`-positioned at the viewport's
 // bottom-left (not `sticky` — this has to stay put even if the page itself
 // scrolls, not just some inner container), so it floats outside the
 // centered card column everything else renders in.
+//
+// Collapsible to a small square launcher pinned at that same bottom-left
+// anchor, for when a board needs the screen room. Collapsing only swaps what
+// renders — `messages` lives in the session hook above, so nothing is lost
+// while closed, and the chosen width/height survive the round trip since
+// they're state on this component, not on the Card. Reopening re-mounts the
+// list, so the scroll-to-bottom effect has to re-fire on expand too, not
+// just on new messages.
 //
 // Resizable from its own top-right corner: since the panel is anchored at
 // the viewport's bottom-left, growing "from the top-right corner" is just
@@ -17,6 +23,11 @@
 // along with it for free); height only drives the scrollable message list,
 // since the header and input row keep their natural size regardless.
 
+// Real vector icons for the two window-chrome controls (minimize, resize)
+// rather than Unicode glyphs: those render inconsistently across
+// platforms/fonts — the diagonal arrows especially, which came out mirrored.
+// lucide-react was already a dependency; this is its first use here.
+import { Minus, MoveDiagonal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
 import type { ChatMessage } from "@/features/lobby-session";
@@ -45,12 +56,14 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(DEFAULT_WIDTH_PX);
   const [listHeight, setListHeight] = useState(DEFAULT_LIST_HEIGHT_PX);
+  const [collapsed, setCollapsed] = useState(false);
 
-  // Always visible, so every new message should pin the view to the bottom.
+  // Every new message should pin the view to the bottom — and so should
+  // expanding, since the list is a fresh mount (scrolled to the top) then.
   useEffect(() => {
     const list = listRef.current;
     if (list !== null) list.scrollTop = list.scrollHeight;
-  }, [messages.length]);
+  }, [messages.length, collapsed]);
 
   function handleSubmit(event: FormEvent): void {
     event.preventDefault();
@@ -103,6 +116,23 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
     handle.addEventListener("pointerup", onUp);
   }
 
+  // Collapsed: just the launcher, at the same bottom-left anchor the panel
+  // itself uses, so reopening puts the card back exactly where it was.
+  if (collapsed) {
+    return (
+      <Button
+        type="button"
+        size="lg"
+        onClick={() => setCollapsed(false)}
+        aria-label="Sohbeti aç"
+        title="Sohbeti aç"
+        className="fixed bottom-4 left-4 z-40 size-12 rounded-2xl p-0 text-xl"
+      >
+        💬
+      </Button>
+    );
+  }
+
   return (
     <Card
       className="fixed bottom-4 left-4 z-40 gap-2 shadow-lg"
@@ -111,6 +141,16 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
       <CardHeader className="flex-row items-center justify-between gap-2">
         <CardTitle>Sohbet</CardTitle>
         <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => setCollapsed(true)}
+            aria-label="Sohbeti kapat"
+            title="Sohbeti kapat"
+          >
+            <Minus aria-hidden="true" />
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -130,7 +170,10 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
             title="Sürükleyerek boyutlandır"
             className="cursor-nesw-resize touch-none"
           >
-            ↗
+            {/* MoveDiagonal, not MoveDiagonal2: its line runs bottom-left to
+                top-right, matching both the drag direction and the
+                `nesw-resize` cursor. The `-2` variant is mirrored. */}
+            <MoveDiagonal aria-hidden="true" />
           </Button>
         </div>
       </CardHeader>
