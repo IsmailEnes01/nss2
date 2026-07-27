@@ -86,15 +86,15 @@ function status(state: HangmanState): GameStatus {
   for (const index of [0, 1] as const) {
     wins[roundWinner(state.rounds[index], index)] += 1;
   }
-  if (wins[0] === 2) return { kind: "won", winner: 0 };
-  if (wins[1] === 2) return { kind: "won", winner: 1 };
+  if (wins[0] === 2) return { kind: "won", winners: [0] };
+  if (wins[1] === 2) return { kind: "won", winners: [1] };
 
   // 1-1 — the tighter guesser takes the match: seat 0 guessed round 1,
   // seat 1 guessed round 0.
   const zeroWrongs = wrongLetters(state.rounds[1]).length;
   const oneWrongs = wrongLetters(state.rounds[0]).length;
-  if (zeroWrongs < oneWrongs) return { kind: "won", winner: 0 };
-  if (oneWrongs < zeroWrongs) return { kind: "won", winner: 1 };
+  if (zeroWrongs < oneWrongs) return { kind: "won", winners: [0] };
+  if (oneWrongs < zeroWrongs) return { kind: "won", winners: [1] };
   return { kind: "draw" };
 }
 

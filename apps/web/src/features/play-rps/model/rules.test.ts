@@ -111,9 +111,9 @@ describe("match status", () => {
 
   it("declares the first player to the target the winner", () => {
     const zeroWins = winRounds(rpsGame.init(0, 2), 0, ROUNDS_TO_WIN);
-    expect(rpsGame.status(zeroWins)).toEqual({ kind: "won", winner: 0 });
+    expect(rpsGame.status(zeroWins)).toEqual({ kind: "won", winners: [0] });
     const oneWins = winRounds(rpsGame.init(0, 2), 1, ROUNDS_TO_WIN);
-    expect(rpsGame.status(oneWins)).toEqual({ kind: "won", winner: 1 });
+    expect(rpsGame.status(oneWins)).toEqual({ kind: "won", winners: [1] });
   });
 
   it("never ends on ties alone", () => {

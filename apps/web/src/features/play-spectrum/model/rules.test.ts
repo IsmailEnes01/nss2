@@ -349,12 +349,17 @@ describe("full match — rotation and cumulative score", () => {
 describe("status and turn once the match ends", () => {
   it("declares a single top scorer the winner", () => {
     const state = fixture({ clueGivers: [0, 1, 2], current: null, score: [5, 9, 3] });
-    expect(spectrumGame.status(state)).toEqual({ kind: "won", winner: 1 });
+    expect(spectrumGame.status(state)).toEqual({ kind: "won", winners: [1] });
     expect(spectrumGame.turn(state)).toBeNull();
   });
 
-  it("is a draw when the top score is shared", () => {
+  it("gives a shared top score to everyone tied for it", () => {
     const state = fixture({ clueGivers: [0, 1, 2], current: null, score: [9, 9, 3] });
+    expect(spectrumGame.status(state)).toEqual({ kind: "won", winners: [0, 1] });
+  });
+
+  it("is only a draw when literally everyone tied", () => {
+    const state = fixture({ clueGivers: [0, 1, 2], current: null, score: [9, 9, 9] });
     expect(spectrumGame.status(state)).toEqual({ kind: "draw" });
   });
 

@@ -11,7 +11,13 @@ import { mulberry32 } from "@/shared/lib/seeded-rng";
 
 // ── Roles ────────────────────────────────────────────────────────────────────
 
-export type Role = "murderer" | "citizen" | "detective" | "cop" | "mayor";
+export type Role =
+  | "murderer"
+  | "citizen"
+  | "detective"
+  | "cop"
+  | "mayor"
+  | "doctor";
 
 export const ROLE_INFO: Readonly<Record<Role, RoleInfo>> = {
   murderer: {
@@ -45,6 +51,13 @@ export const ROLE_INFO: Readonly<Record<Role, RoleInfo>> = {
     evil: false,
     blurb: "Gündüz oylamasında oyun iki oy sayılır.",
   },
+  doctor: {
+    name: "Doktor",
+    icon: "🩺",
+    evil: false,
+    blurb:
+      "Her gün birini koru — o gece katiller onu seçerse hayatta kalır. Kendini koruyamazsın.",
+  },
 };
 
 /** Every role that isn't the murderer counts as good — see the file header. */
@@ -69,14 +82,20 @@ export interface RoleCounts {
   detectives: number;
   cops: number;
   mayors: number;
+  doctors: number;
 }
 
 /** Fills seats with roles and shuffles them, deterministically from the room
  * seed. Requests are honored in priority order (murderers, then detective,
- * cop, mayor) and truncated once seats run out; whatever is left over becomes
- * citizens. Murderers are additionally capped at `playerCount - 1` so there
- * is always at least one good seat — a match that starts already won would
- * be nobody's idea of a game. */
+ * cop, mayor, doctor) and truncated once seats run out; whatever is left over
+ * becomes citizens. Murderers are additionally capped at `playerCount - 1` so
+ * there is always at least one good seat — a match that starts already won
+ * would be nobody's idea of a game.
+ *
+ * Doctor sits last in that order purely because it was added last, and
+ * reordering would silently reshuffle every existing seed. On a small table
+ * with everything requested it's therefore the first special to get dropped;
+ * a host who wants a doctor at four players should zero out a mayor. */
 export function distributeRoles(
   seed: number,
   playerCount: number,
@@ -91,12 +110,15 @@ export function distributeRoles(
   free -= cops;
   const mayors = clampCount(requested.mayors, 0, free);
   free -= mayors;
+  const doctors = clampCount(requested.doctors, 0, free);
+  free -= doctors;
 
   const roles: Role[] = [
     ...Array<Role>(murderers).fill("murderer"),
     ...Array<Role>(detectives).fill("detective"),
     ...Array<Role>(cops).fill("cop"),
     ...Array<Role>(mayors).fill("mayor"),
+    ...Array<Role>(doctors).fill("doctor"),
     ...Array<Role>(free).fill("citizen"),
   ];
   return shuffle(roles, mulberry32(seed ^ 0x5f3a));

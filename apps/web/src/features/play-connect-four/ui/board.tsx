@@ -65,15 +65,23 @@ export function ConnectFourBoard({
 // ── Components ───────────────────────────────────────────────────────────────
 
 function Disc({ owner }: { owner: PlayerIndex | null }) {
+  // An empty slot is a static hole in the board; a filled one is a disc that
+  // was just dropped down the column. The `key` matters: without it React
+  // reuses the same element when `owner` flips from null, and the animation
+  // (which only runs on mount) would never fire.
+  if (owner === null) {
+    return <span className="size-9 rounded-full border bg-background sm:size-10" />;
+  }
   return (
-    <span
-      className={cn(
-        "size-9 rounded-full border sm:size-10",
-        owner === null && "bg-background",
-        owner === 0 && "border-transparent bg-player-one",
-        owner === 1 && "border-transparent bg-player-two",
-      )}
-    />
+    <span className="overflow-hidden">
+      <span
+        key={owner}
+        className={cn(
+          "block size-9 animate-drop rounded-full border border-transparent sm:size-10",
+          owner === 0 ? "bg-player-one" : "bg-player-two",
+        )}
+      />
+    </span>
   );
 }
 

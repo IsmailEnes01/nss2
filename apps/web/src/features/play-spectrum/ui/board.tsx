@@ -13,8 +13,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { BoardProps, PlayerIndex } from "@/entities/game";
+import { outcomeText } from "@/entities/game";
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
+import { CountdownBadge } from "@/shared/ui/countdown-badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import type { SpectrumPair } from "../config/spectrums";
@@ -35,6 +37,7 @@ export function SpectrumBoard({
   me,
   canMove,
   onMove,
+  names,
 }: BoardProps<SpectrumState, SpectrumMove>) {
   const round = state.current;
   const clueGiver = round === null ? null : state.clueGivers[round];
@@ -124,7 +127,7 @@ export function SpectrumBoard({
       <ScoreRow score={state.score} me={me} />
 
       {round === null ? (
-        <MatchOverCard state={state} me={me} />
+        <MatchOverCard state={state} me={me} names={names} />
       ) : state.clueGivers[round] === me ? (
         <>
           <RoundNumber current={round} total={state.clueGivers.length} />
@@ -213,9 +216,7 @@ function GuessProgress({
         {guessedCount}/{totalGuessers} tahmin yapıldı
       </p>
       {secondsLeft !== null && (
-        <Badge variant="outline" className="font-mono">
-          ⏱ {secondsLeft} sn
-        </Badge>
+        <CountdownBadge seconds={secondsLeft} />
       )}
     </div>
   );
@@ -459,7 +460,9 @@ function RoundRow({ round, me, justRevealed }: RoundRowProps) {
   );
 }
 
-function MatchOverCard({ state, me }: MatchOverCardProps) {
+function MatchOverCard({ state, me, names }: MatchOverCardProps) {
+  const nameOf = (seat: PlayerIndex) =>
+    names[seat] ?? spectrumGame.playerLabel(seat);
   const status = spectrumGame.status(state);
   const ranked = state.score
     .map((points, seat) => ({ seat, points }))
@@ -468,11 +471,7 @@ function MatchOverCard({ state, me }: MatchOverCardProps) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 text-center">
       <p className="text-lg font-semibold">
-        {status.kind === "won"
-          ? status.winner === me
-            ? "Kazandın! 🎉"
-            : `${spectrumGame.playerLabel(status.winner)} kazandı`
-          : "Berabere!"}
+        {outcomeText(status, me, nameOf)}
       </p>
       <ol className="flex flex-col gap-1">
         {ranked.map(({ seat, points }) => (
@@ -572,4 +571,5 @@ interface RoundRowProps {
 interface MatchOverCardProps {
   state: SpectrumState;
   me: PlayerIndex;
+  names: readonly string[];
 }

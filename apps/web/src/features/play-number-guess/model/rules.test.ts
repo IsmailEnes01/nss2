@@ -146,7 +146,7 @@ describe("applyMove — winning", () => {
     expect(next).not.toBeNull();
     expect(numberGuessGame.status(next as NumberGuessState)).toEqual({
       kind: "won",
-      winner: 0,
+      winners: [0],
     });
     expect(numberGuessGame.turn(next as NumberGuessState)).toBeNull();
   });
@@ -165,7 +165,7 @@ describe("applyMove — winning", () => {
     expect(next).not.toBeNull();
     expect(numberGuessGame.status(next as NumberGuessState)).toEqual({
       kind: "won",
-      winner: 1,
+      winners: [1],
     });
   });
 });

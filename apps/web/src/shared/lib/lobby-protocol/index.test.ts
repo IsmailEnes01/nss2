@@ -33,6 +33,9 @@ describe("parseClientMessage", () => {
       settings: {},
     });
     expect(parseClientMessage({ t: "rematch" })).toEqual({ t: "rematch" });
+    expect(parseClientMessage({ t: "open-settings" })).toEqual({
+      t: "open-settings",
+    });
     expect(parseClientMessage({ t: "chat", text: "selam" })).toEqual({
       t: "chat",
       text: "selam",
@@ -188,6 +191,39 @@ describe("parseServerMessage", () => {
       youId: "1",
       gameId: "xox",
     });
+    // `reopen` only survives when it's literally true; anything else is
+    // dropped so it can't accidentally interrupt a live match.
+    expect(
+      parseServerMessage({
+        t: "roster",
+        members: [{ id: "1", name: "Ayşe", role: "playing", isHost: true }],
+        youId: "1",
+        gameId: "xox",
+        reopen: true,
+      }),
+    ).toEqual({
+      t: "roster",
+      members: [{ id: "1", name: "Ayşe", role: "playing", isHost: true }],
+      youId: "1",
+      gameId: "xox",
+      reopen: true,
+    });
+    for (const bogus of [false, "yes", 1, null]) {
+      expect(
+        parseServerMessage({
+          t: "roster",
+          members: [{ id: "1", name: "Ayşe", role: "playing", isHost: true }],
+          youId: "1",
+          gameId: "xox",
+          reopen: bogus,
+        }),
+      ).toEqual({
+        t: "roster",
+        members: [{ id: "1", name: "Ayşe", role: "playing", isHost: true }],
+        youId: "1",
+        gameId: "xox",
+      });
+    }
     expect(
       parseServerMessage({
         t: "start",
@@ -234,6 +270,18 @@ describe("parseServerMessage", () => {
       seed: 9,
     });
     expect(parseServerMessage({ t: "peer-left" })).toEqual({ t: "peer-left" });
+    expect(parseServerMessage({ t: "peer-left", name: "Kaan" })).toEqual({
+      t: "peer-left",
+      name: "Kaan",
+    });
+    // A non-string or empty name degrades to the nameless form rather than
+    // rejecting the whole frame — "somebody left" still has to get through.
+    expect(parseServerMessage({ t: "peer-left", name: 7 })).toEqual({
+      t: "peer-left",
+    });
+    expect(parseServerMessage({ t: "peer-left", name: "" })).toEqual({
+      t: "peer-left",
+    });
     expect(
       parseServerMessage({
         t: "chat",

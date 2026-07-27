@@ -12,7 +12,13 @@ import { describe, expect, it } from "vitest";
 import { isEvil, type Role } from "../config/roles";
 import {
   ABSTAIN,
+  DEFAULT_TURN_SECONDS,
+  DEFAULT_VOTE_SECONDS,
   findingsFor,
+  MAX_TURN_SECONDS,
+  MAX_VOTE_SECONDS,
+  MIN_TURN_SECONDS,
+  MIN_VOTE_SECONDS,
   type KatilKimMove,
   type KatilKimState,
   katilKimGame,
@@ -76,9 +82,17 @@ describe("meta", () => {
     expect(katilKimGame.meta.maxPlayers).toBe(16);
   });
 
-  it("exposes one host setting per configurable role", () => {
+  it("exposes a host setting per configurable role, plus both shot clocks", () => {
     const keys = (katilKimGame.meta.settings ?? []).map((field) => field.key);
-    expect(keys).toEqual(["murderers", "detectives", "cops", "mayors"]);
+    expect(keys).toEqual([
+      "murderers",
+      "detectives",
+      "cops",
+      "mayors",
+      "doctors",
+      "turnSeconds",
+      "voteSeconds",
+    ]);
   });
 
   it("never lets the murderer count setting reach zero", () => {
@@ -95,20 +109,34 @@ describe("meta", () => {
 
 describe("init", () => {
   it("honors the host's role counts", () => {
-    const state = init(1234, 6, {
+    const state = init(1234, 7, {
       murderers: 2,
       detectives: 1,
       cops: 1,
       mayors: 1,
+      doctors: 1,
     });
     const count = (role: Role) =>
       state.roles.filter((candidate) => candidate === role).length;
-    expect(state.roles).toHaveLength(6);
+    expect(state.roles).toHaveLength(7);
     expect(count("murderer")).toBe(2);
     expect(count("detective")).toBe(1);
     expect(count("cop")).toBe(1);
     expect(count("mayor")).toBe(1);
+    expect(count("doctor")).toBe(1);
     expect(count("citizen")).toBe(1);
+  });
+
+  it("lets a host turn the doctor off entirely", () => {
+    const state = init(1234, 6, {
+      murderers: 1,
+      detectives: 0,
+      cops: 0,
+      mayors: 0,
+      doctors: 0,
+    });
+    expect(state.roles.filter((role) => role === "doctor")).toHaveLength(0);
+    expect(state.roles.filter((role) => role === "citizen")).toHaveLength(5);
   });
 
   it("clamps over-requested roles to the table and keeps a good seat", () => {
@@ -256,11 +284,13 @@ describe("night resolution", () => {
     let state = staged(["murderer", "cop", "citizen", "citizen"]);
     state = must(state, { t: "killVote", target: 2 }, 0);
     state = passOutTheDay(state);
+    // Seats and outcomes only — never a role. `saved` is a seat index too.
     expect(Object.keys(state.night ?? {}).sort()).toEqual([
       "celled",
       "day",
       "jailed",
       "killed",
+      "saved",
     ]);
   });
 
@@ -390,6 +420,202 @@ describe("jail vote", () => {
   });
 });
 
+describe("doctor", () => {
+  it("blocks the murderers' kill when it shields exactly that seat", () => {
+    let state = staged(["murderer", "doctor", "citizen", "citizen"]);
+    state = must(state, { t: "killVote", target: 2 }, 0);
+    state = must(state, { t: "protect", target: 2 }, 1);
+    state = passOutTheDay(state);
+    expect(state.night?.killed).toBeNull();
+    expect(state.night?.saved).toBe(2);
+    expect(state.alive.every(Boolean)).toBe(true);
+  });
+
+  it("does nothing when it shields someone the murderers didn't pick", () => {
+    let state = staged(["murderer", "doctor", "citizen", "citizen"]);
+    state = must(state, { t: "killVote", target: 2 }, 0);
+    state = must(state, { t: "protect", target: 3 }, 1);
+    state = passOutTheDay(state);
+    expect(state.night?.killed).toBe(2);
+    expect(state.night?.saved).toBeNull();
+    expect(state.alive[2]).toBe(false);
+  });
+
+  it("refuses to shield the doctor themselves", () => {
+    const state = staged(["doctor", "murderer", "citizen", "citizen"]);
+    expect(applyMove(state, { t: "protect", target: 0 }, 0)).toBeNull();
+  });
+
+  it("refuses a shield from any other role, and a doctor's other actions", () => {
+    const state = staged(["doctor", "murderer", "cop", "detective"]);
+    // Wrong role reaching for the shield…
+    expect(
+      applyMove({ ...state, order: [1, 0, 2, 3] }, { t: "protect", target: 0 }, 1),
+    ).toBeNull();
+    // …and the doctor reaching for someone else's action.
+    expect(applyMove(state, { t: "killVote", target: 1 }, 0)).toBeNull();
+    expect(applyMove(state, { t: "cellVote", target: 1 }, 0)).toBeNull();
+    expect(applyMove(state, { t: "investigate", target: 1 }, 0)).toBeNull();
+  });
+
+  it("never lets a shield carry into a later night", () => {
+    // Day 1: shield seat 2, murderers pick seat 3 — the shield is spent.
+    let state = staged(["murderer", "doctor", "citizen", "citizen"]);
+    // Seat 0 is first in speaking order, so the murderer acts before the
+    // doctor here — the day is turn-based, not simultaneous.
+    state = must(state, { t: "killVote", target: 3 }, 0);
+    state = must(state, { t: "protect", target: 2 }, 1);
+    state = passOutTheDay(state);
+    expect(state.night?.killed).toBe(3);
+    state = must(state, { t: "advanceNight", day: 1 }, 0);
+    expect(state.protects.every((p) => p === null)).toBe(true);
+
+    // Day 2: doctor does nothing, murderers go for seat 2 — yesterday's
+    // shield must not still be standing.
+    for (const seat of [0, 1, 2]) {
+      state = must(state, { t: "publicVote", target: null }, seat);
+    }
+    state = must(state, { t: "killVote", target: 2 }, 0);
+    state = passOutTheDay(state);
+    expect(state.night?.killed).toBe(2);
+    expect(state.night?.saved).toBeNull();
+  });
+
+  it("does not shield against the cops' cell", () => {
+    let state = staged(["cop", "doctor", "citizen", "murderer"]);
+    state = must(state, { t: "cellVote", target: 2 }, 0);
+    state = must(state, { t: "protect", target: 2 }, 1);
+    state = passOutTheDay(state);
+    expect(state.night?.celled).toBe(2);
+    expect(state.night?.saved).toBeNull();
+    expect(state.alive[2]).toBe(false);
+  });
+
+  it("does not shield against the daytime jail vote", () => {
+    let state = reachJailVote(staged(["murderer", "doctor", "citizen", "citizen"]));
+    // The shield is cast during the day that FOLLOWS the vote, so it can't
+    // apply — but assert the outcome directly rather than trusting ordering.
+    state = must(state, { t: "publicVote", target: 2 }, 0);
+    state = must(state, { t: "publicVote", target: 2 }, 1);
+    state = must(state, { t: "publicVote", target: 2 }, 3);
+    state = must(state, { t: "publicVote", target: null }, 2);
+    expect(state.alive[2]).toBe(false);
+  });
+
+  it("counts a shield from any one of several doctors", () => {
+    let state = staged(["murderer", "doctor", "doctor", "citizen", "citizen"]);
+    state = must(state, { t: "killVote", target: 4 }, 0);
+    state = must(state, { t: "protect", target: 3 }, 1); // wrong guess
+    state = must(state, { t: "protect", target: 4 }, 2); // right one
+    state = passOutTheDay(state);
+    expect(state.night?.saved).toBe(4);
+    expect(state.alive.every(Boolean)).toBe(true);
+  });
+
+  it("ignores a shield cast by a doctor who is already dead", () => {
+    // Seat 1 (doctor) shields seat 3 on day 1 and is killed that same night;
+    // the shield still counted for that round. Then on day 2 they're gone and
+    // can't act at all.
+    let state = staged(["murderer", "doctor", "citizen", "citizen"]);
+    state = must(state, { t: "killVote", target: 1 }, 0);
+    state = must(state, { t: "protect", target: 3 }, 1);
+    state = passOutTheDay(state);
+    expect(state.alive[1]).toBe(false);
+    state = must(state, { t: "advanceNight", day: 1 }, 0);
+    expect(applyMove(state, { t: "publicVote", target: 0 }, 1)).toBeNull();
+  });
+
+  it("counts the doctor as a good seat for the win condition", () => {
+    let state = reachJailVote(staged(["murderer", "doctor", "citizen", "citizen"]));
+    for (const seat of [1, 2, 3]) {
+      state = must(state, { t: "publicVote", target: 0 }, seat);
+    }
+    state = must(state, { t: "publicVote", target: null }, 0);
+    expect(winningSide(state)).toBe("good");
+    const result = status(state);
+    if (result.kind === "won") expect(result.winners).toContain(1);
+  });
+});
+
+describe("shot clocks", () => {
+  it("clamps both timers on the way in and defaults them", () => {
+    const high = init(1, 5, { turnSeconds: 9999, voteSeconds: 9999 });
+    expect(high.turnSeconds).toBe(MAX_TURN_SECONDS);
+    expect(high.voteSeconds).toBe(MAX_VOTE_SECONDS);
+    const low = init(1, 5, { turnSeconds: 1, voteSeconds: 1 });
+    expect(low.turnSeconds).toBe(MIN_TURN_SECONDS);
+    expect(low.voteSeconds).toBe(MIN_VOTE_SECONDS);
+    const bare = init(1, 5, {});
+    expect(bare.turnSeconds).toBe(DEFAULT_TURN_SECONDS);
+    expect(bare.voteSeconds).toBe(DEFAULT_VOTE_SECONDS);
+    // The jail vote is the whole table arguing, so it gets a long default —
+    // pinned here because it's a deliberate feel choice, not an arbitrary
+    // number.
+    expect(DEFAULT_VOTE_SECONDS).toBe(90);
+    expect(DEFAULT_VOTE_SECONDS).toBeLessThanOrEqual(MAX_VOTE_SECONDS);
+  });
+
+  it("skips the seat on the clock, without acting for them", () => {
+    const state = staged(["murderer", "citizen", "citizen", "citizen"]);
+    const stalled = turn(state) as number;
+    const next = must(state, { t: "turnTimeout", day: 1, seat: stalled }, 0);
+    expect(turn(next)).not.toBe(stalled);
+    expect(next.acted[stalled]).toBe(true);
+    // A skipped murderer casts no kill vote — the skip is a pass, not a guess.
+    expect(next.killVotes.every((vote) => vote === null)).toBe(true);
+  });
+
+  it("makes a duplicate or misaimed turnTimeout a no-op", () => {
+    const state = staged(["murderer", "citizen", "citizen", "citizen"]);
+    const stalled = turn(state) as number;
+    const other = [0, 1, 2, 3].find((seat) => seat !== stalled) as number;
+    expect(applyMove(state, { t: "turnTimeout", day: 1, seat: other }, 0)).toBeNull();
+    expect(applyMove(state, { t: "turnTimeout", day: 9, seat: stalled }, 0)).toBeNull();
+    const skipped = must(state, { t: "turnTimeout", day: 1, seat: stalled }, 0);
+    // The same proposal from a second client lands after the turn moved on.
+    expect(
+      applyMove(skipped, { t: "turnTimeout", day: 1, seat: stalled }, 1),
+    ).toBeNull();
+  });
+
+  it("carries a whole stalled day through to the night", () => {
+    let state = staged(["murderer", "citizen", "citizen", "citizen"]);
+    for (let step = 0; step < 4; step += 1) {
+      const stalled = turn(state) as number;
+      state = must(state, { t: "turnTimeout", day: 1, seat: stalled }, 0);
+    }
+    expect(state.phase).toBe("night");
+    expect(state.night?.killed).toBeNull();
+    expect(state.alive.every(Boolean)).toBe(true);
+  });
+
+  it("closes the jail vote, abstaining for anyone who never voted", () => {
+    let state = reachJailVote(staged(["murderer", "citizen", "citizen", "citizen"]));
+    state = must(state, { t: "publicVote", target: 0 }, 1);
+    state = must(state, { t: "voteTimeout", day: state.day }, 2);
+    // One real ballot beats three abstentions.
+    expect(state.alive[0]).toBe(false);
+    expect(state.phase).toBe("day");
+  });
+
+  it("jails nobody when the vote times out with no ballots at all", () => {
+    const state = must(
+      reachJailVote(staged(["murderer", "citizen", "citizen", "citizen"])),
+      { t: "voteTimeout", day: 2 },
+      0,
+    );
+    expect(state.alive.every(Boolean)).toBe(true);
+    expect(state.phase).toBe("day");
+  });
+
+  it("scopes voteTimeout to its day and phase", () => {
+    const voting = reachJailVote(staged(["murderer", "citizen", "citizen", "citizen"]));
+    expect(applyMove(voting, { t: "voteTimeout", day: 99 }, 0)).toBeNull();
+    const day = must(voting, { t: "voteTimeout", day: voting.day }, 0);
+    expect(applyMove(day, { t: "voteTimeout", day: day.day }, 0)).toBeNull();
+  });
+});
+
 describe("win conditions", () => {
   it("gives it to the good side once the last murderer is gone", () => {
     let state = reachJailVote(staged(["murderer", "citizen", "citizen", "citizen"]));
@@ -400,7 +626,11 @@ describe("win conditions", () => {
     expect(state.alive[0]).toBe(false);
     const result = status(state);
     expect(result.kind).toBe("won");
-    if (result.kind === "won") expect(isEvil(state.roles[result.winner])).toBe(false);
+    // The whole good side wins, dead members included.
+    if (result.kind === "won") {
+      expect(result.winners.every((seat) => !isEvil(state.roles[seat]))).toBe(true);
+      expect(result.winners).toEqual([1, 2, 3]);
+    }
     expect(winningSide(state)).toBe("good");
   });
 
@@ -420,7 +650,10 @@ describe("win conditions", () => {
     expect(livingSeats(state)).toEqual([0, 1]);
     const result = status(state);
     expect(result.kind).toBe("won");
-    if (result.kind === "won") expect(isEvil(state.roles[result.winner])).toBe(true);
+    if (result.kind === "won") {
+      expect(result.winners.every((seat) => isEvil(state.roles[seat]))).toBe(true);
+      expect(result.winners).toEqual([0, 1]);
+    }
     expect(winningSide(state)).toBe("evil");
   });
 

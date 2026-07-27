@@ -85,6 +85,10 @@ export function RpsBoard({
                 className={cn(
                   "flex items-center justify-between gap-2 rounded-lg border",
                   "bg-card px-3 py-1.5 text-sm",
+                  // Newest row is rendered first (the list is reversed), so
+                  // only it is freshly mounted — the animation therefore only
+                  // ever plays on the round that just resolved.
+                  "animate-in fade-in slide-in-from-top-2 duration-300",
                 )}
               >
                 <span className="text-xs text-muted-foreground">

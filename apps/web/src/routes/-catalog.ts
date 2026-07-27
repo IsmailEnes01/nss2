@@ -11,6 +11,7 @@ import {
 import { DotsBoxesBoard, dotsBoxesGame } from "@/features/play-dots-boxes";
 import { HangmanBoard, hangmanGame } from "@/features/play-hangman";
 import { HideDigBoard, hideDigGame } from "@/features/play-hide-dig";
+import { KapmacaBoard, kapmacaGame } from "@/features/play-kapmaca";
 import { KatilKimBoard, katilKimGame } from "@/features/play-katil-kim";
 import {
   NumberGuessBoard,
@@ -35,6 +36,7 @@ export const gamesList: readonly ShellGame[] = [
   { def: pokerGame, Board: PokerBoard },
   { def: hideDigGame, Board: HideDigBoard },
   { def: katilKimGame, Board: KatilKimBoard },
+  { def: kapmacaGame, Board: KapmacaBoard },
 ];
 
 export const gamesById: ReadonlyMap<string, ShellGame> = new Map(

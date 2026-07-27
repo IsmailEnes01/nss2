@@ -10,9 +10,16 @@
  * only ever see 0 or 1; a variable-player game sees up to `maxPlayers - 1`. */
 export type PlayerIndex = number;
 
+/** `winners` is a list because plenty of games can't name a single seat: a
+ * team game (Katil Kim's good side) and a shared top score (Kapmaca,
+ * Spektrum Çarkı) are both real wins with several holders, and collapsing
+ * them to one seat made the shell announce the wrong thing. A normal
+ * one-winner game just returns a single-element list. `draw` stays for the
+ * genuinely undecided end — nobody left standing, or literally everyone tied
+ * — as distinct from "several people won". */
 export type GameStatus =
   | { kind: "ongoing" }
-  | { kind: "won"; winner: PlayerIndex }
+  | { kind: "won"; winners: readonly PlayerIndex[] }
   | { kind: "draw" };
 
 /** One host-configurable numeric knob a game exposes before the match
@@ -77,4 +84,11 @@ export interface BoardProps<S, M> {
   me: PlayerIndex;
   canMove: boolean;
   onMove(move: M): void;
+  /** Nickname per seat, index-aligned with `PlayerIndex`. Boards used to be
+   * name-blind and fell back to `playerLabel` ("Oyuncu 3"), which reads badly
+   * anywhere seats are discussed as people — a social-deduction game is
+   * unplayable without real names. Prefer `names[seat]`, but guard the
+   * lookup: a board can be rendered for a spectator or mid-reconnect before
+   * the roster has settled. */
+  names: readonly string[];
 }

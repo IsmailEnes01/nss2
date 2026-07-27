@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from "react";
 import type { BoardProps, PlayerIndex } from "@/entities/game";
+import { outcomeText } from "@/entities/game";
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -32,6 +33,7 @@ export function PokerBoard({
   me,
   canMove,
   onMove,
+  names,
 }: BoardProps<PokerState, PokerMove>) {
   const status = pokerGame.status(state);
 
@@ -47,7 +49,7 @@ export function PokerBoard({
       </div>
 
       {status.kind === "won" ? (
-        <MatchOverCard state={state} me={me} />
+        <MatchOverCard state={state} me={me} names={names} />
       ) : (
         canMove && <ActionBar state={state} me={me} onMove={onMove} />
       )}
@@ -88,7 +90,14 @@ function CommunityCards({ state }: { state: PokerState }) {
     <div className="flex justify-center gap-1.5">
       {Array.from({ length: 5 }, (_, i) =>
         i < revealed.length ? (
-          <PlayingCard key={i} card={revealed[i]} />
+          // dealIndex is the position within the street that just landed, so
+          // a flop deals as three staggered cards while turn/river each land
+          // on their own with no delay.
+          <PlayingCard
+            key={i}
+            card={revealed[i]}
+            dealIndex={revealed.length <= 3 ? i : 0}
+          />
         ) : (
           <CardSlot key={i} />
         ),
@@ -108,7 +117,7 @@ function SeatRow({ state, seat, me }: SeatRowProps) {
     <div
       className={cn(
         "flex items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-sm",
-        toAct && "border-primary ring-2 ring-primary/30",
+        toAct && "animate-pulse-ring border-primary ring-2 ring-primary/30",
         (eliminated || folded) && "opacity-50",
       )}
     >
@@ -288,7 +297,17 @@ function LastHandBanner({ result, me }: { result: PokerHandResult; me: PlayerInd
   );
 }
 
-function MatchOverCard({ state, me }: { state: PokerState; me: PlayerIndex }) {
+function MatchOverCard({
+  state,
+  me,
+  names,
+}: {
+  state: PokerState;
+  me: PlayerIndex;
+  names: readonly string[];
+}) {
+  const nameOf = (seat: PlayerIndex) =>
+    names[seat] ?? pokerGame.playerLabel(seat);
   const status = pokerGame.status(state);
   const ranked = state.stacks
     .map((chips, seat) => ({ seat, chips }))
@@ -297,11 +316,7 @@ function MatchOverCard({ state, me }: { state: PokerState; me: PlayerIndex }) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 text-center">
       <p className="text-lg font-semibold">
-        {status.kind === "won"
-          ? status.winner === me
-            ? "Kazandın! 🎉"
-            : `${pokerGame.playerLabel(status.winner)} kazandı`
-          : "Berabere!"}
+        {outcomeText(status, me, nameOf)}
       </p>
       <ol className="flex flex-col gap-1">
         {ranked.map(({ seat, chips }) => (
@@ -322,12 +337,26 @@ function MatchOverCard({ state, me }: { state: PokerState; me: PlayerIndex }) {
 
 /** A face-up card — red for hearts/diamonds, otherwise the default text
  * color (no separate "black suit" color needed). */
-function PlayingCard({ card, small }: { card: Card; small?: boolean }) {
+function PlayingCard({
+  card,
+  small,
+  dealIndex = 0,
+}: {
+  card: Card;
+  small?: boolean;
+  /** Position in its row, for staggering the deal. */
+  dealIndex?: number;
+}) {
   const red = isRedSuit(card.suit);
   return (
     <div
+      // Keyed on the card so a new street's cards animate in while the ones
+      // already on the table sit still — without this the whole row would
+      // re-deal every time the flop grew.
+      key={`${card.rank}-${card.suit}`}
+      style={{ animationDelay: `${dealIndex * 90}ms` }}
       className={cn(
-        "flex flex-col items-center justify-center rounded-md border bg-card font-mono font-semibold shadow-sm",
+        "flex animate-deal flex-col items-center justify-center rounded-md border bg-card font-mono font-semibold shadow-sm",
         small ? "h-10 w-7 text-xs" : "h-14 w-10 text-sm",
         red ? "text-red-500" : "text-foreground",
       )}
