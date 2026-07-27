@@ -23,8 +23,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { BoardProps, PlayerIndex } from "@/entities/game";
+import { outcomeText } from "@/entities/game";
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
+import { CountdownBadge } from "@/shared/ui/countdown-badge";
 import {
   type HideDigMove,
   type HideDigRoundResult,
@@ -42,6 +44,7 @@ export function HideDigBoard({
   me,
   canMove,
   onMove,
+  names,
 }: BoardProps<HideDigState, HideDigMove>) {
   const status = hideDigGame.status(state);
   const iAmEliminated = state.eliminated[me];
@@ -150,7 +153,7 @@ export function HideDigBoard({
       {state.revealing !== null ? (
         <RevealPanel round={state.revealing} me={me} secondsLeft={revealSecondsLeft} />
       ) : status.kind !== "ongoing" ? (
-        <MatchOverCard state={state} me={me} />
+        <MatchOverCard state={state} me={me} names={names} />
       ) : (
         <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
           <div className="flex items-center justify-between">
@@ -158,9 +161,7 @@ export function HideDigBoard({
               Tur {state.round + 1} ({state.gridSize}×{state.gridSize})
             </p>
             {secondsLeft !== null && (
-              <Badge variant="outline" className="font-mono">
-                ⏱ {secondsLeft} sn
-              </Badge>
+              <CountdownBadge seconds={secondsLeft} />
             )}
           </div>
 
@@ -307,9 +308,7 @@ function RevealPanel({
           Tur {round.round + 1} ({round.gridSize}×{round.gridSize}) — Açılış
         </p>
         {secondsLeft !== null && (
-          <Badge variant="outline" className="font-mono">
-            ⏱ {secondsLeft} sn
-          </Badge>
+          <CountdownBadge seconds={secondsLeft} />
         )}
       </div>
       <div
@@ -323,9 +322,16 @@ function RevealPanel({
           return (
             <div
               key={tile}
-              style={{ width: LIVE_TILE_PX, height: LIVE_TILE_PX }}
+              style={{
+                width: LIVE_TILE_PX,
+                height: LIVE_TILE_PX,
+                // Tiles turn over in reading order rather than all at once,
+                // so the grid resolves as a sweep. Capped well inside
+                // REVEAL_SECONDS even on the opening 5×5.
+                animationDelay: `${Math.min(tile * 35, 900)}ms`,
+              }}
               className={cn(
-                "flex shrink-0 items-center justify-center rounded-md border text-base leading-none",
+                "flex shrink-0 animate-flip items-center justify-center rounded-md border text-base leading-none",
                 dug ? "border-foreground bg-foreground" : "bg-muted/50",
               )}
             >
@@ -434,7 +440,17 @@ function RoundReveal({
   );
 }
 
-function MatchOverCard({ state, me }: { state: HideDigState; me: PlayerIndex }) {
+function MatchOverCard({
+  state,
+  me,
+  names,
+}: {
+  state: HideDigState;
+  me: PlayerIndex;
+  names: readonly string[];
+}) {
+  const nameOf = (seat: PlayerIndex) =>
+    names[seat] ?? hideDigGame.playerLabel(seat);
   const status = hideDigGame.status(state);
   const lastRound = state.history[state.history.length - 1];
   const drawSeats = lastRound?.eliminated ?? [];
@@ -442,11 +458,7 @@ function MatchOverCard({ state, me }: { state: HideDigState; me: PlayerIndex }) 
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 text-center">
       <p className="text-lg font-semibold">
-        {status.kind === "won"
-          ? status.winner === me
-            ? "Kazandın! 🎉"
-            : `${hideDigGame.playerLabel(status.winner)} kazandı`
-          : "Berabere!"}
+        {outcomeText(status, me, nameOf)}
       </p>
       {status.kind === "draw" && drawSeats.length > 0 && (
         <p className="text-sm text-muted-foreground">

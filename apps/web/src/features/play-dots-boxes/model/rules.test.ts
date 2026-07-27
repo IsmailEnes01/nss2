@@ -158,11 +158,11 @@ describe("status", () => {
   it("scores a finished board by majority", () => {
     expect(dotsBoxesGame.status(finishedState(9))).toEqual({
       kind: "won",
-      winner: 0,
+      winners: [0],
     });
     expect(dotsBoxesGame.status(finishedState(7))).toEqual({
       kind: "won",
-      winner: 1,
+      winners: [1],
     });
   });
 
@@ -206,7 +206,7 @@ describe("full game", () => {
     if (first === second) {
       expect(result).toEqual({ kind: "draw" });
     } else {
-      expect(result).toEqual({ kind: "won", winner: first > second ? 0 : 1 });
+      expect(result).toEqual({ kind: "won", winners: [first > second ? 0 : 1] });
     }
   });
 });

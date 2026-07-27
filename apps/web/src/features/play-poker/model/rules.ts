@@ -204,7 +204,7 @@ function status(state: PokerState): GameStatus {
   );
   if (remainingSeats.length === 0) return { kind: "draw" };
   if (remainingSeats.length === 1) {
-    return { kind: "won", winner: remainingSeats[0] };
+    return { kind: "won", winners: [remainingSeats[0]] };
   }
   return { kind: "ongoing" };
 }

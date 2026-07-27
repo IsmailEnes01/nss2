@@ -65,10 +65,10 @@ function applyMove(
 
 function status(state: BattleshipState): GameStatus {
   if (isFleetSunk(state.fleets[1], state.shots[0])) {
-    return { kind: "won", winner: 0 };
+    return { kind: "won", winners: [0] };
   }
   if (isFleetSunk(state.fleets[0], state.shots[1])) {
-    return { kind: "won", winner: 1 };
+    return { kind: "won", winners: [1] };
   }
   return { kind: "ongoing" };
 }

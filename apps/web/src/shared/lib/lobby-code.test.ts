@@ -1,3 +1,8 @@
+// Length-agnostic on purpose: these used to hardcode 4-character literals,
+// which meant changing LOBBY_CODE_LENGTH broke a dozen assertions that were
+// never really about the number 4. Every fixture below is now built from the
+// constant, so the suite follows the code wherever it goes.
+
 import { describe, expect, it } from "vitest";
 import {
   generateLobbyCode,
@@ -5,6 +10,12 @@ import {
   LOBBY_CODE_LENGTH,
 } from "./lobby-code";
 import { mulberry32 } from "./seeded-rng";
+
+/** A valid code, with `bad` swapped into the last position when given. */
+function code(bad?: string): string {
+  const body = "AB2ZCDE".repeat(3).slice(0, LOBBY_CODE_LENGTH);
+  return bad === undefined ? body : body.slice(0, -1) + bad;
+}
 
 describe("generateLobbyCode", () => {
   it("returns codes of the expected length", () => {
@@ -29,29 +40,41 @@ describe("generateLobbyCode", () => {
     const codes = Array.from({ length: 500 }, () => generateLobbyCode(rng));
     expect(codes.join("")).not.toMatch(/[0O1IL]/);
   });
+
+  it("draws on enough of the alphabet to be worth guessing at", () => {
+    // A sanity floor on the keyspace: the code is the only thing gating a
+    // room, so a regression that shortened it or collapsed the alphabet
+    // should fail here rather than in production.
+    const rng = mulberry32(3);
+    const seen = new Set(
+      Array.from({ length: 400 }, () => generateLobbyCode(rng)).join(""),
+    );
+    expect(seen.size).toBeGreaterThanOrEqual(30);
+    expect(LOBBY_CODE_LENGTH).toBeGreaterThanOrEqual(6);
+  });
 });
 
 describe("isValidLobbyCode", () => {
   it("accepts a well-formed code", () => {
-    expect(isValidLobbyCode("AB2Z")).toBe(true);
+    expect(isValidLobbyCode(code())).toBe(true);
   });
 
   it("rejects wrong lengths", () => {
     expect(isValidLobbyCode("")).toBe(false);
-    expect(isValidLobbyCode("ABC")).toBe(false);
-    expect(isValidLobbyCode("ABCDE")).toBe(false);
+    expect(isValidLobbyCode(code().slice(0, -1))).toBe(false); // one short
+    expect(isValidLobbyCode(`${code()}A`)).toBe(false); // one long
   });
 
   it("rejects ambiguous or foreign characters", () => {
-    expect(isValidLobbyCode("AB0D")).toBe(false); // zero
-    expect(isValidLobbyCode("ABOD")).toBe(false); // letter O
-    expect(isValidLobbyCode("AB1D")).toBe(false); // one
-    expect(isValidLobbyCode("ABID")).toBe(false); // letter I
-    expect(isValidLobbyCode("ABLD")).toBe(false); // letter L
-    expect(isValidLobbyCode("AB-D")).toBe(false);
+    expect(isValidLobbyCode(code("0"))).toBe(false); // zero
+    expect(isValidLobbyCode(code("O"))).toBe(false); // letter O
+    expect(isValidLobbyCode(code("1"))).toBe(false); // one
+    expect(isValidLobbyCode(code("I"))).toBe(false); // letter I
+    expect(isValidLobbyCode(code("L"))).toBe(false); // letter L
+    expect(isValidLobbyCode(code("-"))).toBe(false);
   });
 
   it("rejects lowercase input (callers normalize first)", () => {
-    expect(isValidLobbyCode("abcd")).toBe(false);
+    expect(isValidLobbyCode(code().toLowerCase())).toBe(false);
   });
 });

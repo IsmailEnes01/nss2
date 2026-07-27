@@ -126,7 +126,7 @@ describe("win detection", () => {
   it("declares player 0 the winner after sinking the whole enemy fleet", () => {
     const state = battleshipGame.init(21, 2);
     const finished = sinkEnemyFleet(state, 0);
-    expect(battleshipGame.status(finished)).toEqual({ kind: "won", winner: 0 });
+    expect(battleshipGame.status(finished)).toEqual({ kind: "won", winners: [0] });
     expect(battleshipGame.turn(finished)).toBeNull();
   });
 
@@ -134,7 +134,7 @@ describe("win detection", () => {
     const state = battleshipGame.init(21, 2);
     const afterMiss = apply(state, moveTo(missCell(state, 0)), 0);
     const finished = sinkEnemyFleet(afterMiss, 1);
-    expect(battleshipGame.status(finished)).toEqual({ kind: "won", winner: 1 });
+    expect(battleshipGame.status(finished)).toEqual({ kind: "won", winners: [1] });
     expect(battleshipGame.turn(finished)).toBeNull();
   });
 

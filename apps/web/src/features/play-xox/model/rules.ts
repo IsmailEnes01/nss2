@@ -66,7 +66,7 @@ function status(state: XoxState): GameStatus {
   for (const [a, b, c] of LINES) {
     const mark = state.board[a];
     if (mark !== null && mark === state.board[b] && mark === state.board[c]) {
-      return { kind: "won", winner: mark };
+      return { kind: "won", winners: [mark] };
     }
   }
   return state.board.every((mark) => mark !== null)

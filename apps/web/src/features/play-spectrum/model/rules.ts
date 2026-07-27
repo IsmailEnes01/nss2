@@ -152,13 +152,18 @@ function applyMove(
   return null;
 }
 
+/** Highest score takes it. Several seats tied at the top share a real win
+ * (reported as a multi-holder `won`); only an everybody-tied table is a
+ * genuine draw. */
 function status(state: SpectrumState): GameStatus {
   if (state.current !== null) return { kind: "ongoing" };
   const top = Math.max(...state.score);
   const winners = state.score.flatMap((points, seat) =>
     points === top ? [seat] : [],
   );
-  return winners.length === 1 ? { kind: "won", winner: winners[0] } : { kind: "draw" };
+  return winners.length === state.score.length
+    ? { kind: "draw" }
+    : { kind: "won", winners };
 }
 
 /** The Clue Giver alone can act during the clue phase (a real "turn"); once

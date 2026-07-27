@@ -10,6 +10,8 @@
     "test": "vitest run",
     "check": "biome check .",
     "check:fix": "biome check . --write",
+    "design:tokens": "node scripts/design-tokens.mjs",
+    "design:tokens:check": "node scripts/design-tokens.mjs --check",
     "t": "tsc --noEmit"
   },
   "dependencies": {

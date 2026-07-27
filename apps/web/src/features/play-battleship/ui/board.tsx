@@ -188,7 +188,9 @@ function Mark({ label, className, children }: MarkProps) {
       role="img"
       aria-label={label}
       className={cn(
-        "flex items-center justify-center rounded-sm bg-muted/60 text-xs font-semibold",
+        // Every resolved shot — hit, miss or sunk — lands with a pop, so the
+        // grid registers a shell arriving instead of a glyph appearing.
+        "flex animate-pop items-center justify-center rounded-sm bg-muted/60 text-xs font-semibold",
         className,
       )}
     >

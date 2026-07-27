@@ -158,12 +158,12 @@ describe("match outcomes", () => {
 
   it("gives player 1 the sweep: guessed round 0, hanged player 0", () => {
     const state = hangRound(completeRound(hangmanGame.init(9, 2), 0), 1);
-    expect(hangmanGame.status(state)).toEqual({ kind: "won", winner: 1 });
+    expect(hangmanGame.status(state)).toEqual({ kind: "won", winners: [1] });
   });
 
   it("gives player 0 the sweep: hanged player 1, guessed round 1", () => {
     const state = completeRound(hangRound(hangmanGame.init(9, 2), 0), 1);
-    expect(hangmanGame.status(state)).toEqual({ kind: "won", winner: 0 });
+    expect(hangmanGame.status(state)).toEqual({ kind: "won", winners: [0] });
   });
 
   it("breaks 1-1 toward the guesser with fewer wrong letters", () => {
@@ -171,12 +171,12 @@ describe("match outcomes", () => {
     const zeroTighter = completeRound(completeRound(start, 0, 2), 1, 0);
     expect(hangmanGame.status(zeroTighter)).toEqual({
       kind: "won",
-      winner: 0,
+      winners: [0],
     });
     const oneTighter = completeRound(completeRound(start, 0, 0), 1, 2);
     expect(hangmanGame.status(oneTighter)).toEqual({
       kind: "won",
-      winner: 1,
+      winners: [1],
     });
   });
 

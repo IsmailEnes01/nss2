@@ -93,6 +93,7 @@ export function useLobbySession(
       assignRole: session.assignRole,
       randomizeRoles: session.randomizeRoles,
       selectGame: session.selectGame,
+      openSettings: session.openSettings,
       startMatch: session.startMatch,
       sendRematch: session.sendRematch,
       sendChat: session.sendChat,
@@ -153,9 +154,11 @@ function applyServerMessage(
       // A stray broadcast (someone joining/leaving) must not interrupt a
       // live match — but the host changing the game IS a roster broadcast,
       // and that's exactly meant to interrupt it, so the two are told apart
-      // by whether the game actually changed.
+      // by whether the game actually changed. `reopen` is the third case:
+      // the host asked to retune settings, so the pick is deliberately
+      // unchanged and only the flag says to interrupt.
       if (state.phase === "playing" || state.phase === "peer-left") {
-        if (message.gameId !== state.gameId) {
+        if (message.reopen === true || message.gameId !== state.gameId) {
           return {
             phase: "roster",
             code: state.code,
@@ -208,7 +211,17 @@ function applyServerMessage(
       return state.phase === "playing"
         ? { ...state, seed: message.seed }
         : state;
-    case "peer-left":
+    case "peer-left": {
+      // More than one player can walk out of the same match, so departures
+      // accumulate rather than the last one overwriting the rest. A second
+      // `peer-left` therefore has to be handled from the peer-left phase too,
+      // not only from `playing`.
+      const departed = message.name === undefined ? [] : [message.name];
+      if (state.phase === "peer-left") {
+        return departed.length === 0
+          ? state
+          : { ...state, departed: [...state.departed, ...departed] };
+      }
       return state.phase === "playing"
         ? {
             phase: "peer-left",
@@ -218,8 +231,10 @@ function applyServerMessage(
             gameId: state.gameId,
             settings: state.settings,
             isHost: state.isHost,
+            departed,
           }
         : state;
+    }
     case "error":
       return sessionError(message.reason);
     case "peer-move":
@@ -321,6 +336,10 @@ class LobbySession {
 
   /** Host-only: picks (or replaces) the game to play, from inside the room.
    * `null` clears the pick, going back to the game-select screen. */
+  readonly openSettings = (): void => {
+    this.send({ t: "open-settings" });
+  };
+
   readonly selectGame = (gameId: string | null): void => {
     this.send({ t: "select-game", gameId });
   };
@@ -558,6 +577,10 @@ export type LobbySessionState =
       gameId: string;
       settings: Record<string, number>;
       isHost: boolean;
+      /** Who walked out, in the order they went — several people can leave
+       * the same match. Empty only when the server sent no name (a room
+       * older than the field), which the UI phrases impersonally. */
+      departed: string[];
     }
   | { phase: "closed" }
   | { phase: "error"; reason: LobbySessionErrorReason; message: string };
@@ -592,6 +615,9 @@ export interface UseLobbySession {
   randomizeRoles(maxPlaying: number): void;
   /** Host-only: picks (or replaces) the game to play; null clears the pick. */
   selectGame(gameId: string | null): void;
+  /** Host-only: reopen the pre-game settings screen without changing the
+   * pick. Ends the live match, since settings feed `game.init`. */
+  openSettings(): void;
   /** Host-only: `settings` is the game's chosen `GameSettingField` values
    * (`{}` for a game with none). */
   startMatch(settings: Record<string, number>): void;

@@ -30,7 +30,14 @@ export function XoxBoard({
               mark === 1 && "text-player-two",
             )}
           >
-            {mark === null ? "" : xoxGame.playerLabel(mark)}
+            {mark !== null && (
+              // Keyed on the mark so the pop replays if the same cell is ever
+              // refilled (a rematch reusing this mounted grid), rather than
+              // only on first paint.
+              <span key={mark} className="animate-pop">
+                {xoxGame.playerLabel(mark)}
+              </span>
+            )}
           </button>
         ))}
       </div>

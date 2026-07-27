@@ -76,8 +76,8 @@ function applyMove(
 function status(state: DotsBoxesState): GameStatus {
   const [first, second] = boxCounts(state);
   if (first + second < BOX_COUNT) return { kind: "ongoing" };
-  if (first > second) return { kind: "won", winner: 0 };
-  if (second > first) return { kind: "won", winner: 1 };
+  if (first > second) return { kind: "won", winners: [0] };
+  if (second > first) return { kind: "won", winners: [1] };
   return { kind: "draw" };
 }
 

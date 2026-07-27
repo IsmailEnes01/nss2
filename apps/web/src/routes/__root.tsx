@@ -1,5 +1,6 @@
 import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { SoundToggle } from "@/shared/ui/sound-toggle";
 import appCss from "../styles.css?url";
 
 // Favicon is an inline SVG data URI (no public/ asset pipeline needed): a
@@ -42,6 +43,9 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       </head>
       <body>
         {children}
+        {/* Global, on every route: the home page has no header to hang it
+            off, and it has to stay reachable mid-match. */}
+        <SoundToggle />
         <Scripts />
       </body>
     </html>
