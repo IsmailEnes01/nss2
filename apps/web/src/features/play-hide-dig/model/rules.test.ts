@@ -149,7 +149,7 @@ describe("reveal window", () => {
       0,
     ) as HideDigState;
     expect(s.revealing).not.toBeNull(); // still shows the reveal even though the match already has a winner
-    expect(hideDigGame.status(s)).toEqual({ kind: "won", winner: 0 });
+    expect(hideDigGame.status(s)).toEqual({ kind: "won", winners: [0] });
 
     const advanced = hideDigGame.applyMove(
       s,
@@ -158,7 +158,7 @@ describe("reveal window", () => {
     ) as HideDigState;
     expect(advanced.revealing).toBeNull();
     expect(advanced.round).toBe(0); // no next round was dealt
-    expect(hideDigGame.status(advanced)).toEqual({ kind: "won", winner: 0 });
+    expect(hideDigGame.status(advanced)).toEqual({ kind: "won", winners: [0] });
   });
 });
 
@@ -176,7 +176,7 @@ describe("self-dig exemption and cross-seat elimination", () => {
     expect(s.eliminated[0]).toBe(true); // dug by seat1 (an other seat)
     expect(s.eliminated[1]).toBe(true); // dug by seat0 (an other seat)
     expect(s.eliminated[2]).toBe(false); // only self-dug — exempt
-    expect(hideDigGame.status(s)).toEqual({ kind: "won", winner: 2 });
+    expect(hideDigGame.status(s)).toEqual({ kind: "won", winners: [2] });
 
     const round = s.history[0];
     expect([...round.eliminated].sort()).toEqual([0, 1]);
@@ -205,7 +205,7 @@ describe("hide timeout: missing the hide window eliminates you", () => {
       0,
     ) as HideDigState;
     expect(resolved.eliminated).toEqual([false, true, true]);
-    expect(hideDigGame.status(resolved)).toEqual({ kind: "won", winner: 0 });
+    expect(hideDigGame.status(resolved)).toEqual({ kind: "won", winners: [0] });
   });
 
   it("rejects resolveRound before any hide has landed (no countdown could have started)", () => {

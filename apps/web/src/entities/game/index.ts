@@ -6,3 +6,4 @@ export type {
   GameStatus,
   PlayerIndex,
 } from "./model/game-def";
+export { outcomeText } from "./model/outcome";

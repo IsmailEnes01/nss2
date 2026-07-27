@@ -78,10 +78,14 @@ function BoxCell({ owner }: BoxCellProps) {
   if (owner === null) return <span />;
   return (
     <span
+      // Keyed on the owner so closing a box pops it — that's the scoring
+      // moment in this game and it was previously indistinguishable from the
+      // rest of the lattice quietly changing colour.
+      key={owner}
       role="img"
       aria-label={`${dotsBoxesGame.playerLabel(owner)} kutusu`}
       className={cn(
-        "m-[3px] flex items-center justify-center rounded-md text-xs font-bold",
+        "m-[3px] flex animate-pop items-center justify-center rounded-md text-xs font-bold",
         PLAYER_SOFT[owner],
       )}
     >

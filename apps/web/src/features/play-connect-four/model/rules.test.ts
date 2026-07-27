@@ -110,28 +110,28 @@ describe("applyMove", () => {
 describe("win detection", () => {
   it("finds a vertical four", () => {
     const state = play([0, 1, 0, 1, 0, 1, 0]);
-    expect(connectFourGame.status(state)).toEqual({ kind: "won", winner: 0 });
+    expect(connectFourGame.status(state)).toEqual({ kind: "won", winners: [0] });
     expect(connectFourGame.turn(state)).toBeNull();
   });
 
   it("finds a horizontal four", () => {
     const state = play([0, 0, 1, 1, 2, 2, 3]);
-    expect(connectFourGame.status(state)).toEqual({ kind: "won", winner: 0 });
+    expect(connectFourGame.status(state)).toEqual({ kind: "won", winners: [0] });
   });
 
   it("finds a rising diagonal four", () => {
     const state = play([0, 1, 1, 2, 3, 2, 2, 3, 3, 6, 3]);
-    expect(connectFourGame.status(state)).toEqual({ kind: "won", winner: 0 });
+    expect(connectFourGame.status(state)).toEqual({ kind: "won", winners: [0] });
   });
 
   it("finds a falling diagonal four", () => {
     const state = play([3, 2, 2, 1, 1, 0, 1, 0, 0, 6, 0]);
-    expect(connectFourGame.status(state)).toEqual({ kind: "won", winner: 0 });
+    expect(connectFourGame.status(state)).toEqual({ kind: "won", winners: [0] });
   });
 
   it("finds seat 1's win too", () => {
     const state = play([0, 6, 1, 6, 0, 6, 1, 6]);
-    expect(connectFourGame.status(state)).toEqual({ kind: "won", winner: 1 });
+    expect(connectFourGame.status(state)).toEqual({ kind: "won", winners: [1] });
     expect(connectFourGame.turn(state)).toBeNull();
   });
 
@@ -144,7 +144,7 @@ describe("win detection", () => {
       ".......",
       ".......",
     ]);
-    expect(connectFourGame.status(state)).toEqual({ kind: "won", winner: 1 });
+    expect(connectFourGame.status(state)).toEqual({ kind: "won", winners: [1] });
   });
 
   it("does not call three in a row a win", () => {

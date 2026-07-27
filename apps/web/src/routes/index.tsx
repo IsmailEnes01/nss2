@@ -118,8 +118,14 @@ function GamesShowcase() {
       aria-label="Oyunlar"
       className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
     >
-      {gamesList.map(({ def }) => (
-        <Card key={def.meta.id} className="gap-3">
+      {gamesList.map(({ def }, index) => (
+        <Card
+          key={def.meta.id}
+          // The grid deals itself in on first paint, one tile after another.
+          // Capped so the last of twelve still lands quickly.
+          style={{ animationDelay: `${Math.min(index * 50, 500)}ms` }}
+          className="animate-in gap-3 fade-in slide-in-from-bottom-3 duration-400 fill-mode-backwards hover:-translate-y-0.5 hover:border-primary/40 transition-all"
+        >
           <CardHeader className="gap-2">
             <span
               aria-hidden="true"
