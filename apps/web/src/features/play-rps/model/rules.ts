@@ -72,8 +72,8 @@ function applyMove(
 }
 
 function status(state: RpsState): GameStatus {
-  if (state.score[0] >= ROUNDS_TO_WIN) return { kind: "won", winner: 0 };
-  if (state.score[1] >= ROUNDS_TO_WIN) return { kind: "won", winner: 1 };
+  if (state.score[0] >= ROUNDS_TO_WIN) return { kind: "won", winners: [0] };
+  if (state.score[1] >= ROUNDS_TO_WIN) return { kind: "won", winners: [1] };
   return { kind: "ongoing" };
 }
 

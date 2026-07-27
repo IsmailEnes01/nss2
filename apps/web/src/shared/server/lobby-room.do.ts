@@ -131,11 +131,22 @@ export class LobbyRoom extends DurableObject<Env> {
       case "select-game":
         if (self.isHost) this.selectGame(message.gameId);
         break;
+      case "open-settings":
+        // Host-only. Deliberately does NOT touch `this.gameId`: the pick
+        // stays exactly as it is, and the `reopen` flag is what tells
+        // mid-match clients to drop back to the arrange screen anyway.
+        if (self.isHost) this.broadcastRoster({ reopen: true });
+        break;
       case "start-match":
         if (self.isHost) this.startMatch(message.settings);
         break;
       case "rematch":
-        if (this.playingCount() >= 2) {
+        // Host-only, like every other match-lifecycle action (select-game,
+        // start-match, assign-role). This is the authoritative check: the
+        // board also hides the button from guests, but a guest can still
+        // hand-craft the frame, and a rematch reseeds and restarts the match
+        // for all 16 people in the room.
+        if (self.isHost && this.playingCount() >= 2) {
           this.broadcast({ t: "rematch-start", seed: randomSeed() });
         }
         break;
@@ -228,7 +239,10 @@ export class LobbyRoom extends DurableObject<Env> {
     }
   }
 
-  private broadcastRoster(): void {
+  /** One roster frame per socket — `youId` differs for each, which is why
+   * this can't go through `broadcast`. `reopen` forces mid-match clients back
+   * to the settings screen even though the pick is unchanged. */
+  private broadcastRoster(options?: { reopen?: boolean }): void {
     const roster = [...this.members.values()];
     for (const [ws, member] of this.members) {
       send(ws, {
@@ -236,6 +250,7 @@ export class LobbyRoom extends DurableObject<Env> {
         members: roster,
         youId: member.id,
         gameId: this.gameId,
+        ...(options?.reopen === true ? { reopen: true as const } : {}),
       });
     }
   }
@@ -257,7 +272,7 @@ export class LobbyRoom extends DurableObject<Env> {
     // it's always safe to send — the roster broadcast is what actually frees
     // the seat for the host to reassign before a match has started.
     if (member.role === "playing") {
-      this.broadcast({ t: "peer-left" });
+      this.broadcast({ t: "peer-left", name: member.name });
     }
     this.broadcastRoster();
   }

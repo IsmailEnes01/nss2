@@ -19,6 +19,8 @@ import { useEffect, useRef, useState } from "react";
 import type { BoardProps, PlayerIndex } from "@/entities/game";
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
+import { CountdownBadge } from "@/shared/ui/countdown-badge";
+import { Panel, PanelTitle } from "@/shared/ui/panel";
 import { Button } from "@/shared/ui/button";
 import { ROLE_INFO, type Role } from "../config/roles";
 import {
@@ -39,11 +41,14 @@ export function KatilKimBoard({
   me,
   canMove,
   onMove,
+  names,
 }: BoardProps<KatilKimState, KatilKimMove>) {
   const status = katilKimGame.status(state);
   const finished = status.kind !== "ongoing";
   const myRole = state.roles[me];
   const iAmAlive = state.alive[me];
+  const nameOf = (seat: PlayerIndex) =>
+    names[seat] ?? katilKimGame.playerLabel(seat);
 
   const onMoveRef = useRef(onMove);
   useEffect(() => {
@@ -71,14 +76,62 @@ export function KatilKimBoard({
       ? 0
       : Math.max(0, Math.ceil((nightDeadline - Date.now()) / 1000));
 
+  // Shot clocks. Without these one AFK seat froze the match: the day can't
+  // end until every living seat has acted. Both proposals are idempotent and
+  // scoped (day, plus the seat for the turn timer), so firing them from every
+  // client is safe — see the timeout branches in rules.ts.
+  //
+  // The turn clock is keyed on `day` + whose turn it is, so it restarts for
+  // each seat rather than running once for the whole day.
+  const dayActor = state.phase === "day" ? katilKimGame.turn(state) : null;
+  const [turnDeadline, setTurnDeadline] = useState<number | null>(null);
+  useEffect(() => {
+    setTurnDeadline(
+      dayActor === null ? null : Date.now() + state.turnSeconds * 1000,
+    );
+  }, [dayActor, state.day, state.turnSeconds]);
+  useEffect(() => {
+    if (dayActor === null || turnDeadline === null || finished) return;
+    const day = state.day;
+    const timer = setTimeout(
+      () => onMoveRef.current({ t: "turnTimeout", day, seat: dayActor }),
+      Math.max(0, turnDeadline - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [dayActor, turnDeadline, finished, state.day]);
+
+  const voting = state.phase === "publicVote";
+  const [voteDeadline, setVoteDeadline] = useState<number | null>(null);
+  useEffect(() => {
+    setVoteDeadline(voting ? Date.now() + state.voteSeconds * 1000 : null);
+  }, [voting, state.day, state.voteSeconds]);
+  useEffect(() => {
+    if (!voting || voteDeadline === null || finished) return;
+    const day = state.day;
+    const timer = setTimeout(
+      () => onMoveRef.current({ t: "voteTimeout", day }),
+      Math.max(0, voteDeadline - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [voting, voteDeadline, finished, state.day]);
+
+  // One shared ticker so every countdown label re-renders each second.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (finished) return;
+    const id = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(id);
+  }, [finished]);
+
+  const phaseSecondsLeft = secondsUntil(voting ? voteDeadline : turnDeadline);
   const myFindings = findingsFor(state, me);
 
   return (
     <div className="flex w-full max-w-lg flex-col gap-4">
-      <RoleCard state={state} me={me} />
+      <RoleCard state={state} me={me} nameOf={nameOf} />
 
       {finished ? (
-        <MatchOverCard state={state} me={me} />
+        <MatchOverCard state={state} me={me} nameOf={nameOf} />
       ) : !iAmAlive ? (
         <Panel>
           <p className="text-center text-sm text-muted-foreground">
@@ -86,19 +139,28 @@ export function KatilKimBoard({
           </p>
         </Panel>
       ) : state.phase === "night" ? (
-        <NightPanel state={state} me={me} secondsLeft={nightSecondsLeft} />
+        <NightPanel state={state} me={me} nameOf={nameOf} secondsLeft={nightSecondsLeft} />
       ) : state.phase === "publicVote" ? (
         <PublicVotePanel
           state={state}
           me={me}
           canMove={canMove}
           onMove={onMove}
+          nameOf={nameOf}
+          secondsLeft={phaseSecondsLeft}
         />
       ) : (
-        <DayPanel state={state} me={me} canMove={canMove} onMove={onMove} />
+        <DayPanel
+          state={state}
+          me={me}
+          canMove={canMove}
+          onMove={onMove}
+          nameOf={nameOf}
+          secondsLeft={phaseSecondsLeft}
+        />
       )}
 
-      <SeatList state={state} me={me} />
+      <SeatList state={state} me={me} nameOf={nameOf} />
 
       {myRole === "detective" && myFindings.length > 0 && (
         <Panel>
@@ -110,7 +172,7 @@ export function KatilKimBoard({
                 className="flex items-center justify-between gap-2"
               >
                 <span className="text-muted-foreground">
-                  {finding.day}. gün · {seatName(finding.target)}
+                  {finding.day}. gün · {nameOf(finding.target)}
                 </span>
                 <RoleChip role={finding.role} />
               </li>
@@ -119,7 +181,7 @@ export function KatilKimBoard({
         </Panel>
       )}
 
-      {state.history.length > 0 && <History state={state} />}
+      {state.history.length > 0 && <History state={state} nameOf={nameOf} />}
     </div>
   );
 }
@@ -128,7 +190,7 @@ export function KatilKimBoard({
 
 /** Always on screen: what I am, what that lets me do, and — murderers only —
  * who else is in on it. Dead allies stay listed; knowing one is gone matters. */
-function RoleCard({ state, me }: PerspectiveProps) {
+function RoleCard({ state, me, nameOf }: PerspectiveProps) {
   const role = state.roles[me];
   const info = ROLE_INFO[role];
   const allies = visibleAllies(state, me);
@@ -136,7 +198,10 @@ function RoleCard({ state, me }: PerspectiveProps) {
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 rounded-2xl border p-3",
+        // Your role card flips in on arrival — it's the one moment in the
+        // match where you learn something big, so it gets the deal treatment
+        // rather than the generic panel fade.
+        "flex animate-flip flex-col gap-2 rounded-2xl border p-3",
         info.evil ? "border-destructive/40 bg-destructive/10" : "bg-card",
       )}
     >
@@ -157,7 +222,7 @@ function RoleCard({ state, me }: PerspectiveProps) {
             <span key={seat}>
               {index > 0 && ", "}
               <span className={cn(!state.alive[seat] && "line-through opacity-60")}>
-                {seatName(seat)}
+                {nameOf(seat)}
               </span>
             </span>
           ))}
@@ -169,14 +234,17 @@ function RoleCard({ state, me }: PerspectiveProps) {
 
 /** The simultaneous morning vote. Everyone living picks a target or abstains;
  * my own ballot is shown back to me once cast, nobody else's ever is. */
-function PublicVotePanel({ state, me, canMove, onMove }: ActionProps) {
+function PublicVotePanel({ state, me, canMove, onMove, nameOf, secondsLeft }: ActionProps & { secondsLeft: number }) {
   const { cast, total } = publicVoteProgress(state);
   const myVote = state.publicVotes[me];
   const pending = awaitingMe(state, me);
 
   return (
     <Panel>
-      <PanelTitle>{state.day}. gün · Kimi hapse atalım?</PanelTitle>
+      <div className="flex items-center justify-between gap-2">
+        <PanelTitle>{state.day}. gün · Kimi hapse atalım?</PanelTitle>
+        <CountdownBadge seconds={secondsLeft} />
+      </div>
       {pending ? (
         <>
           <TargetGrid
@@ -184,6 +252,7 @@ function PublicVotePanel({ state, me, canMove, onMove }: ActionProps) {
             me={me}
             disabled={!canMove}
             onPick={(target) => onMove({ t: "publicVote", target })}
+            nameOf={nameOf}
           />
           <Button
             variant="outline"
@@ -198,7 +267,7 @@ function PublicVotePanel({ state, me, canMove, onMove }: ActionProps) {
         <p className="text-center text-sm text-muted-foreground">
           {myVote === null || myVote < 0
             ? "Çekimser kaldın."
-            : `Oyun: ${seatName(myVote)}`}{" "}
+            : `Oyun: ${nameOf(myVote)}`}{" "}
           Diğerleri bekleniyor…
         </p>
       )}
@@ -212,7 +281,7 @@ function PublicVotePanel({ state, me, canMove, onMove }: ActionProps) {
 /** The turn-based stretch. Only the seat `turn()` names can act, so everyone
  * else gets a "waiting on X" line — deliberately naming the seat, since whose
  * turn it is has to be public for a turn-based game to be playable. */
-function DayPanel({ state, me, canMove, onMove }: ActionProps) {
+function DayPanel({ state, me, canMove, onMove, nameOf, secondsLeft }: ActionProps & { secondsLeft: number }) {
   const actor = katilKimGame.turn(state);
   const mine = actor === me;
   const role = state.roles[me];
@@ -221,13 +290,17 @@ function DayPanel({ state, me, canMove, onMove }: ActionProps) {
 
   return (
     <Panel>
-      <PanelTitle>
-        {state.day}. gün · {mine ? "Sıra sende" : `Sıra: ${seatName(actor ?? me)}`}
-      </PanelTitle>
+      <div className="flex items-center justify-between gap-2">
+        <PanelTitle>
+          {state.day}. gün ·{" "}
+          {mine ? "Sıra sende" : `Sıra: ${nameOf(actor ?? me)}`}
+        </PanelTitle>
+        <CountdownBadge seconds={secondsLeft} />
+      </div>
 
       {!mine ? (
         <p className="text-center text-sm text-muted-foreground">
-          {seatName(actor ?? me)} hamlesini yapıyor…
+          {nameOf(actor ?? me)} hamlesini yapıyor…
         </p>
       ) : role === "murderer" ? (
         <ActionPrompt label="Kimi öldürmek için oy veriyorsun?">
@@ -236,6 +309,7 @@ function DayPanel({ state, me, canMove, onMove }: ActionProps) {
             me={me}
             disabled={!canMove}
             onPick={(target) => onMove({ t: "killVote", target })}
+            nameOf={nameOf}
           />
         </ActionPrompt>
       ) : role === "cop" ? (
@@ -245,6 +319,7 @@ function DayPanel({ state, me, canMove, onMove }: ActionProps) {
             me={me}
             disabled={!canMove}
             onPick={(target) => onMove({ t: "cellVote", target })}
+            nameOf={nameOf}
           />
         </ActionPrompt>
       ) : role === "detective" ? (
@@ -254,6 +329,17 @@ function DayPanel({ state, me, canMove, onMove }: ActionProps) {
             me={me}
             disabled={!canMove}
             onPick={(target) => onMove({ t: "investigate", target })}
+            nameOf={nameOf}
+          />
+        </ActionPrompt>
+      ) : role === "doctor" ? (
+        <ActionPrompt label="Kimi bu gece koruyacaksın?">
+          <TargetGrid
+            state={state}
+            me={me}
+            disabled={!canMove}
+            onPick={(target) => onMove({ t: "protect", target })}
+            nameOf={nameOf}
           />
         </ActionPrompt>
       ) : (
@@ -286,6 +372,7 @@ function DayPanel({ state, me, canMove, onMove }: ActionProps) {
 function NightPanel({
   state,
   me,
+  nameOf,
   secondsLeft,
 }: PerspectiveProps & { secondsLeft: number }) {
   const report = state.night;
@@ -300,21 +387,54 @@ function NightPanel({
     <Panel>
       <div className="flex items-center justify-between gap-2">
         <PanelTitle>🌙 {report.day}. gecenin sonu</PanelTitle>
-        <Badge variant="outline" className="font-mono">
-          {secondsLeft} sn
-        </Badge>
+        {/* No urgency styling here — nothing is expected of you during the
+            report, so a red pulsing clock would be pure false alarm. */}
+        <CountdownBadge seconds={secondsLeft} urgentAt={0} />
       </div>
+      {/* A thwarted murder is announced, but the survivor is NOT named. Naming
+          them would hand the murderers the doctor's exact target and, with it,
+          a very short list of who the doctor might be. "Someone was saved" is
+          the classic compromise: the table learns a doctor is alive and acted,
+          without learning who either of them is. The one person who already
+          knows is the target, and they're told directly. */}
+      {report.saved !== null && (
+        <p
+          className={cn(
+            "flex items-center justify-center gap-2 rounded-xl bg-primary/10 px-3 py-2 text-center text-sm",
+            report.saved === me && "font-semibold",
+          )}
+        >
+          <span aria-hidden="true">🩺</span>
+          {report.saved === me
+            ? "Bu gece öldürülecektin — bir doktor seni kurtardı."
+            : "Bir cinayet engellendi — doktor yetişti."}
+        </p>
+      )}
+
       {removed.length === 0 ? (
         <p className="text-center text-sm text-muted-foreground">
-          Bu gece kimse oyundan çıkmadı.
+          {report.saved === null
+            ? "Bu gece kimse oyundan çıkmadı."
+            : "Kimse oyundan çıkmadı."}
         </p>
       ) : (
         <ul className="flex flex-col gap-1 text-sm">
-          {removed.map(({ seat, how }) => (
-            <li key={`${how}-${seat}`} className="flex items-center gap-2">
+          {removed.map(({ seat, how }, index) => (
+            <li
+              key={`${how}-${seat}`}
+              // Deaths are announced one at a time, ~0.6s apart — a night that
+              // took two people should land as two pieces of news. Well inside
+              // the NIGHT_SECONDS window even at three removals.
+              style={{ animationDelay: `${index * 600}ms` }}
+              className={cn(
+                "flex animate-in items-center gap-2 fade-in slide-in-from-left-2 duration-500 fill-mode-backwards",
+                // Your own death gets the shake. Someone else's doesn't.
+                seat === me && "animate-shake",
+              )}
+            >
               <span aria-hidden="true">☠️</span>
               <span className={cn(seat === me && "font-semibold")}>
-                {seat === me ? "Sen" : seatName(seat)}
+                {seat === me ? "Sen" : nameOf(seat)}
               </span>
               <span className="text-muted-foreground">{how}.</span>
             </li>
@@ -331,14 +451,19 @@ function NightPanel({
 /** Final scoreboard — and the only place every role is legitimately shown,
  * since the match is over. Names the winning *side*, because the platform's
  * GameStatus can only carry a single seat (see status() in rules.ts). */
-function MatchOverCard({ state, me }: PerspectiveProps) {
+function MatchOverCard({ state, me, nameOf }: PerspectiveProps) {
   const side = winningSide(state);
   const iWon =
     side !== null && (side === "evil") === ROLE_INFO[state.roles[me]].evil;
 
   return (
     <Panel>
-      <p className="text-center font-display text-lg font-semibold">
+      <p
+        className={cn(
+          "text-center font-display text-lg font-semibold",
+          iWon && "animate-pop",
+        )}
+      >
         {side === null
           ? "Berabere — kimse ayakta kalmadı."
           : side === "evil"
@@ -353,18 +478,14 @@ function MatchOverCard({ state, me }: PerspectiveProps) {
       <PanelTitle>Roller</PanelTitle>
       <ul className="flex flex-col gap-1 text-sm">
         {state.roles.map((role, seat) => (
-          <li
-            // biome-ignore lint/suspicious/noArrayIndexKey: seat index *is* the identity
-            key={seat}
-            className="flex items-center justify-between gap-2"
-          >
+          <li key={seat} className="flex items-center justify-between gap-2">
             <span
               className={cn(
                 !state.alive[seat] && "line-through opacity-60",
                 seat === me && "font-semibold",
               )}
             >
-              {seat === me ? `${seatName(seat)} (sen)` : seatName(seat)}
+              {seat === me ? `${nameOf(seat)} (sen)` : nameOf(seat)}
             </span>
             <RoleChip role={role} />
           </li>
@@ -384,11 +505,13 @@ function TargetGrid({
   me,
   disabled,
   onPick,
+  nameOf,
 }: {
   state: KatilKimState;
   me: PlayerIndex;
   disabled: boolean;
   onPick(target: PlayerIndex): void;
+  nameOf(seat: PlayerIndex): string;
 }) {
   const targets = livingSeats(state).filter((seat) => seat !== me);
   return (
@@ -401,7 +524,7 @@ function TargetGrid({
           disabled={disabled}
           onClick={() => onPick(seat)}
         >
-          {seatName(seat)}
+          {nameOf(seat)}
         </Button>
       ))}
     </div>
@@ -410,7 +533,7 @@ function TargetGrid({
 
 /** Who's still in, in speaking order — so the turn-based day is followable.
  * Roles are never rendered here; that's the point. */
-function SeatList({ state, me }: PerspectiveProps) {
+function SeatList({ state, me, nameOf }: PerspectiveProps) {
   const actor = katilKimGame.turn(state);
   return (
     <Panel>
@@ -426,7 +549,7 @@ function SeatList({ state, me }: PerspectiveProps) {
                 seat === me && "font-semibold",
               )}
             >
-              {seat === me ? `${seatName(seat)} (sen)` : seatName(seat)}
+              {seat === me ? `${nameOf(seat)} (sen)` : nameOf(seat)}
               {state.phase === "publicVote" &&
                 state.alive[seat] &&
                 state.publicVotes[seat] !== null && (
@@ -442,7 +565,7 @@ function SeatList({ state, me }: PerspectiveProps) {
   );
 }
 
-function History({ state }: { state: KatilKimState }) {
+function History({ state, nameOf }: { state: KatilKimState; nameOf(seat: PlayerIndex): string }) {
   return (
     <Panel>
       <PanelTitle>Geçmiş</PanelTitle>
@@ -456,7 +579,7 @@ function History({ state }: { state: KatilKimState }) {
               {report.day}. gün ·{" "}
               {gone.length === 0
                 ? "kimse çıkmadı"
-                : gone.map(seatName).join(", ")}
+                : gone.map(nameOf).join(", ")}
             </li>
           );
         })}
@@ -489,24 +612,15 @@ function ActionPrompt({
   );
 }
 
-function Panel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3">
-      {children}
-    </div>
-  );
-}
-
-function PanelTitle({ children }: { children: React.ReactNode }) {
-  return <p className="font-display text-sm font-semibold">{children}</p>;
-}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Boards get seat indices, not nicknames — the shell owns names. Matches
- * `katilKimGame.playerLabel`. */
-function seatName(seat: PlayerIndex): string {
-  return `Oyuncu ${seat + 1}`;
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+function secondsUntil(deadline: number | null): number {
+  if (deadline === null) return 0;
+  return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -514,6 +628,8 @@ function seatName(seat: PlayerIndex): string {
 interface PerspectiveProps {
   state: KatilKimState;
   me: PlayerIndex;
+  /** Seat → nickname, falling back to the game's own label. */
+  nameOf(seat: PlayerIndex): string;
 }
 
 interface ActionProps extends PerspectiveProps {

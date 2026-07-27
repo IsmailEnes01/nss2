@@ -78,7 +78,7 @@ function applyMove(
 function status(state: NumberGuessState): GameStatus {
   return state.winner === null
     ? { kind: "ongoing" }
-    : { kind: "won", winner: state.winner };
+    : { kind: "won", winners: [state.winner] };
 }
 
 function turn(state: NumberGuessState): PlayerIndex | null {

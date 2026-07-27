@@ -144,7 +144,7 @@ function applyMove(
 function status(state: HideDigState): GameStatus {
   const remaining = seatsWhere(state.playerCount, (seat) => !state.eliminated[seat]);
   if (remaining.length === 0) return { kind: "draw" };
-  if (remaining.length === 1) return { kind: "won", winner: remaining[0] };
+  if (remaining.length === 1) return { kind: "won", winners: [remaining[0]] };
   return { kind: "ongoing" };
 }
 

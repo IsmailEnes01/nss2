@@ -59,6 +59,7 @@ const peerLeft: LobbySessionState = {
   gameId: GAME_ID,
   settings: {},
   isHost: true,
+  departed: [],
 };
 
 function afterMessage(
@@ -178,6 +179,25 @@ describe("reduceSession — happy path", () => {
     });
   });
 
+  it("records who left, and accumulates a second departure", () => {
+    const first = afterMessage(playing, { t: "peer-left", name: "Kaan" });
+    expect(first).toEqual({ ...peerLeft, departed: ["Kaan"] });
+    // A second walkout arrives while already in peer-left; it must append
+    // rather than be ignored or overwrite the first.
+    const second = afterMessage(first, { t: "peer-left", name: "Derya" });
+    expect(second).toEqual({ ...peerLeft, departed: ["Kaan", "Derya"] });
+  });
+
+  it("tolerates a nameless peer-left from an older server", () => {
+    expect(afterMessage(playing, { t: "peer-left" })).toEqual({
+      ...peerLeft,
+      departed: [],
+    });
+    // And a nameless one arriving second changes nothing.
+    const named = afterMessage(playing, { t: "peer-left", name: "Kaan" });
+    expect(afterMessage(named, { t: "peer-left" })).toEqual(named);
+  });
+
   it("keeps names, seat, and game through peer-left, then restarts on rejoin", () => {
     expect(afterMessage(playing, { t: "peer-left" })).toEqual(peerLeft);
     const rejoin: ServerMessage = {
@@ -231,6 +251,45 @@ describe("reduceSession — happy path", () => {
       youId: HOST.id,
       gameId: "sayi-tahmini",
     });
+  });
+
+  it("reopens settings mid-match on `reopen`, keeping the same game", () => {
+    // The whole point: the pick is UNCHANGED, so the normal
+    // "gameId differs?" test would ignore this roster. `reopen` overrides it.
+    const reopen: ServerMessage = {
+      t: "roster",
+      members: [HOST, GUEST],
+      youId: HOST.id,
+      gameId: playing.gameId,
+      reopen: true,
+    };
+    expect(afterMessage(playing, reopen)).toEqual({
+      phase: "roster",
+      code: CODE,
+      members: [HOST, GUEST],
+      youId: HOST.id,
+      gameId: playing.gameId,
+    });
+    // Also reachable from peer-left, same as changing the game is.
+    expect(afterMessage(peerLeft, reopen)).toEqual({
+      phase: "roster",
+      code: CODE,
+      members: [HOST, GUEST],
+      youId: HOST.id,
+      gameId: playing.gameId,
+    });
+  });
+
+  it("still ignores a same-game roster with no reopen flag", () => {
+    // The guard this feature had to punch through: a join/leave mid-match
+    // broadcasts a roster, and that must NOT interrupt play.
+    const sameGame: ServerMessage = {
+      t: "roster",
+      members: [HOST, GUEST],
+      youId: HOST.id,
+      gameId: playing.gameId,
+    };
+    expect(afterMessage(playing, sameGame)).toBe(playing);
   });
 
   it("treats peer-move as a side channel — state is untouched", () => {

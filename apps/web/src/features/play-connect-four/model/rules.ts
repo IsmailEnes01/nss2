@@ -74,7 +74,7 @@ function applyMove(
 
 function status(state: ConnectFourState): GameStatus {
   const winner = findWinner(state.board);
-  if (winner !== null) return { kind: "won", winner };
+  if (winner !== null) return { kind: "won", winners: [winner] };
   return state.board.every((row) => row.every((cell) => cell !== null))
     ? { kind: "draw" }
     : { kind: "ongoing" };

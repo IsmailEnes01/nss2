@@ -8,13 +8,18 @@
 //   2. `day` — turn-based, walking the seed-fixed random `order`. On their
 //      turn a seat takes their role action: murderers vote a kill target,
 //      cops vote a cell target, detectives learn one seat's role (privately),
-//      and citizens/mayors have nothing to do but pass. Anyone may pass.
+//      doctors shield one seat for the coming night, and citizens/mayors have
+//      nothing to do but pass. Anyone may pass.
 //   3. `night` — a fixed-length report of who was removed, and nothing else.
 //      Deliberately does NOT reveal the removed seats' roles.
 //
 // Removals are resolved on the day→night transition: the murderers' plurality
-// target is killed, the cops' plurality target is sent to a cell (also a
-// removal), ties inside either vote broken deterministically from the seed.
+// target is killed *unless a doctor shielded exactly that seat this same
+// round*, the cops' plurality target is sent to a cell (also a removal), ties
+// inside either vote broken deterministically from the seed. A shield only
+// ever counters the murderers and only within its own round — `protects` is
+// cleared whenever a new day opens, so nothing carries forward, and a seat the
+// cops cell goes regardless of any doctor.
 //
 // SECRECY IS UI-ONLY, BY DESIGN. Lobi is lockstep — every client replays the
 // same move stream, so every client's memory necessarily holds every role and
@@ -48,10 +53,23 @@ import {
 /** How long every client shows a night report before proposing to move on. */
 export const NIGHT_SECONDS = 6;
 
+/** Shot clocks. `turnSeconds` is per seat during the turn-based day;
+ * `voteSeconds` covers the whole simultaneous jail vote. Both exist so one
+ * AFK player can't freeze the match — see the timeout branches in
+ * `applyMove`. */
+export const DEFAULT_TURN_SECONDS = 30;
+export const MIN_TURN_SECONDS = 10;
+export const MAX_TURN_SECONDS = 120;
+
+export const DEFAULT_VOTE_SECONDS = 90;
+export const MIN_VOTE_SECONDS = 15;
+export const MAX_VOTE_SECONDS = 180;
+
 export const DEFAULT_MURDERERS = 1;
 export const DEFAULT_DETECTIVES = 1;
 export const DEFAULT_COPS = 1;
 export const DEFAULT_MAYORS = 1;
+export const DEFAULT_DOCTORS = 1;
 
 const MAX_MURDERERS = 6;
 const MAX_SPECIALS = 4;
@@ -97,6 +115,27 @@ export const katilKimGame: GameDef<KatilKimState, KatilKimMove> = {
         max: MAX_SPECIALS,
         default: DEFAULT_MAYORS,
       },
+      {
+        key: "doctors",
+        label: "Doktor sayısı",
+        min: 0,
+        max: MAX_SPECIALS,
+        default: DEFAULT_DOCTORS,
+      },
+      {
+        key: "turnSeconds",
+        label: "Sıra süresi (sn)",
+        min: MIN_TURN_SECONDS,
+        max: MAX_TURN_SECONDS,
+        default: DEFAULT_TURN_SECONDS,
+      },
+      {
+        key: "voteSeconds",
+        label: "Oylama süresi (sn)",
+        min: MIN_VOTE_SECONDS,
+        max: MAX_VOTE_SECONDS,
+        default: DEFAULT_VOTE_SECONDS,
+      },
     ],
   },
   playerLabel: (index) => `Oyuncu ${index + 1}`,
@@ -123,11 +162,24 @@ function init(
     detectives: settings.detectives ?? DEFAULT_DETECTIVES,
     cops: settings.cops ?? DEFAULT_COPS,
     mayors: settings.mayors ?? DEFAULT_MAYORS,
+    doctors: settings.doctors ?? DEFAULT_DOCTORS,
   };
   const order = shuffleTurnOrder(seed, playerCount);
   return {
     seed,
     playerCount,
+    turnSeconds: clampSetting(
+      settings.turnSeconds,
+      MIN_TURN_SECONDS,
+      MAX_TURN_SECONDS,
+      DEFAULT_TURN_SECONDS,
+    ),
+    voteSeconds: clampSetting(
+      settings.voteSeconds,
+      MIN_VOTE_SECONDS,
+      MAX_VOTE_SECONDS,
+      DEFAULT_VOTE_SECONDS,
+    ),
     roles: distributeRoles(seed, playerCount, requested),
     order,
     alive: Array(playerCount).fill(true),
@@ -138,6 +190,7 @@ function init(
     acted: Array(playerCount).fill(false),
     killVotes: Array(playerCount).fill(null),
     cellVotes: Array(playerCount).fill(null),
+    protects: Array(playerCount).fill(null),
     findings: [],
     night: null,
     history: [],
@@ -157,6 +210,33 @@ function applyMove(
     if (move.day !== state.night.day) return null;
     return openNextDay(state);
   }
+  // Both timeouts below are proposed by any client's own clock once its local
+  // deadline passes, and both are idempotent: scoped to a day (and, for the
+  // turn timer, to the seat that is actually on the clock), so a stale
+  // proposal from a phase that already moved on is a harmless no-op. Without
+  // them a single AFK seat froze the match permanently — the day cannot end
+  // until every living seat has acted.
+  if (isVoteTimeoutMove(move)) {
+    if (state.phase !== "publicVote") return null;
+    if (move.day !== state.day) return null;
+    // Anyone who never got a ballot in is recorded as abstaining, which is
+    // the same thing a deliberate abstention produces.
+    const publicVotes = state.publicVotes.map((vote, seat) =>
+      state.alive[seat] && vote === null ? ABSTAIN : vote,
+    );
+    return resolvePublicVote({ ...state, publicVotes });
+  }
+  if (isTurnTimeoutMove(move)) {
+    if (state.phase !== "day") return null;
+    if (move.day !== state.day) return null;
+    const stalled = turn(state);
+    // Naming the seat makes this safe to fire from every client at once: once
+    // the stalled seat has been skipped, the turn has moved on and every
+    // later copy of the same proposal fails this check.
+    if (stalled === null || stalled !== move.seat) return null;
+    return finishTurn({ ...state, acted: replaceAt(state.acted, stalled, true) });
+  }
+
   if (!isSeat(player, state.playerCount)) return null;
   if (!state.alive[player]) return null;
 
@@ -195,6 +275,13 @@ function applyMove(
     if (role !== "cop") return null;
     if (!isLivingTarget(state, move.target, player)) return null;
     next = { ...state, cellVotes: replaceAt(state.cellVotes, player, move.target) };
+  } else if (isProtectMove(move)) {
+    if (role !== "doctor") return null;
+    // `isLivingTarget` already rules out self — the doctor can't save
+    // themselves, per the brief, and that's the same rule every other
+    // targeted action follows.
+    if (!isLivingTarget(state, move.target, player)) return null;
+    next = { ...state, protects: replaceAt(state.protects, player, move.target) };
   } else if (isInvestigateMove(move)) {
     if (role !== "detective") return null;
     if (!isLivingTarget(state, move.target, player)) return null;
@@ -214,12 +301,16 @@ function applyMove(
     return null;
   }
 
-  const acted = { ...next, acted: replaceAt(next.acted, player, true) };
-  // Advancing the cursor and resolving the night are the same decision: the
-  // day is over exactly when no living seat is left to act.
-  return nextActor(acted) === null
-    ? resolveNight(acted)
-    : { ...acted, cursor: acted.cursor + 1 };
+  return finishTurn({ ...next, acted: replaceAt(next.acted, player, true) });
+}
+
+/** Closes out whoever just acted (or was skipped by the turn timer).
+ * Advancing the cursor and resolving the night are the same decision: the
+ * day is over exactly when no living seat is left to act. */
+function finishTurn(state: KatilKimState): KatilKimState {
+  return nextActor(state) === null
+    ? resolveNight(state)
+    : { ...state, cursor: state.cursor + 1 };
 }
 
 /** Good wins the moment no murderer is left; evil wins the moment no good
@@ -233,12 +324,19 @@ function status(state: KatilKimState): GameStatus {
     (seat) => !isEvil(state.roles[seat]),
   );
   if (evilAlive.length === 0 && goodAlive.length === 0) return { kind: "draw" };
-  // The platform's GameStatus can only name a single winning seat, so a team
-  // result is reported through its lowest-indexed survivor. The board renders
-  // the authoritative "İyiler/Katiller kazandı" line — see winningSide().
-  if (evilAlive.length === 0) return { kind: "won", winner: goodAlive[0] };
-  if (goodAlive.length === 0) return { kind: "won", winner: evilAlive[0] };
+  // The whole winning side wins, dead members included — a villager murdered
+  // on night one still beat the murderers. So `winners` is every seat on that
+  // side rather than only the survivors.
+  if (evilAlive.length === 0) return { kind: "won", winners: sideSeats(state, false) };
+  if (goodAlive.length === 0) return { kind: "won", winners: sideSeats(state, true) };
   return { kind: "ongoing" };
+}
+
+/** Every seat on one alignment, alive or not. */
+function sideSeats(state: KatilKimState, evil: boolean): PlayerIndex[] {
+  return seats(state.playerCount).filter(
+    (seat) => isEvil(state.roles[seat]) === evil,
+  );
 }
 
 /** Only the `day` phase has a turn — the jail vote is simultaneous and the
@@ -271,6 +369,7 @@ function resolvePublicVote(state: KatilKimState): KatilKimState {
     acted: Array(state.playerCount).fill(false),
     killVotes: Array(state.playerCount).fill(null),
     cellVotes: Array(state.playerCount).fill(null),
+    protects: Array(state.playerCount).fill(null),
   };
 }
 
@@ -278,8 +377,19 @@ function resolvePublicVote(state: KatilKimState): KatilKimState {
  * is celled (also a removal). Ties inside either vote are broken from the
  * seed rather than skipped — the brief asks for a random pick among tied. */
 function resolveNight(state: KatilKimState): KatilKimState {
-  const killed = pluralityTarget(state, state.killVotes, "kill");
+  const target = pluralityTarget(state, state.killVotes, "kill");
   const celled = pluralityTarget(state, state.cellVotes, "cell");
+
+  // The doctors' saves only count against a kill landing in THIS round —
+  // `protects` is wiped every time a new day opens, so a protection can never
+  // carry forward to a later night. Protection is specifically against the
+  // murderers: a seat the cops send to a cell still goes, doctor or not.
+  const guarded = state.protects.some(
+    (protectedSeat, seat) =>
+      state.alive[seat] && protectedSeat !== null && protectedSeat === target,
+  );
+  const saved = guarded ? target : null;
+  const killed = guarded ? null : target;
 
   let alive = state.alive;
   if (killed !== null) alive = replaceAt(alive, killed, false);
@@ -289,6 +399,7 @@ function resolveNight(state: KatilKimState): KatilKimState {
     day: state.day,
     killed,
     celled,
+    saved,
     jailed: state.jailedToday ?? null,
   };
   return {
@@ -314,6 +425,7 @@ function openNextDay(state: KatilKimState): KatilKimState {
     acted: Array(state.playerCount).fill(false),
     killVotes: Array(state.playerCount).fill(null),
     cellVotes: Array(state.playerCount).fill(null),
+    protects: Array(state.playerCount).fill(null),
   };
 }
 
@@ -405,11 +517,13 @@ export function publicVoteProgress(state: KatilKimState): {
   };
 }
 
-/** The authoritative team result, since GameStatus can only name one seat. */
+/** Which alignment took the match — the board's headline. Reads the first
+ * winner's role, which is safe because `status` only ever fills `winners`
+ * from a single side. */
 export function winningSide(state: KatilKimState): "good" | "evil" | null {
   const result = status(state);
   if (result.kind !== "won") return null;
-  return isEvil(state.roles[result.winner]) ? "evil" : "good";
+  return isEvil(state.roles[result.winners[0]]) ? "evil" : "good";
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -450,6 +564,17 @@ function isSeat(value: number, playerCount: number): boolean {
   return Number.isInteger(value) && value >= 0 && value < playerCount;
 }
 
+/** Re-clamps a host setting that crossed the wire. */
+function clampSetting(
+  value: number | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.min(Math.max(Math.trunc(value), min), max);
+}
+
 function seats(playerCount: number): PlayerIndex[] {
   return Array.from({ length: playerCount }, (_, index) => index);
 }
@@ -479,6 +604,12 @@ function isCellVoteMove(move: unknown): move is CellVoteMove {
   return isRecord(move) && move.t === "cellVote" && typeof move.target === "number";
 }
 
+function isProtectMove(move: unknown): move is ProtectMove {
+  return (
+    isRecord(move) && move.t === "protect" && typeof move.target === "number"
+  );
+}
+
 function isInvestigateMove(move: unknown): move is InvestigateMove {
   return (
     isRecord(move) && move.t === "investigate" && typeof move.target === "number"
@@ -492,6 +623,21 @@ function isPassMove(move: unknown): move is PassMove {
 function isAdvanceNightMove(move: unknown): move is AdvanceNightMove {
   return (
     isRecord(move) && move.t === "advanceNight" && typeof move.day === "number"
+  );
+}
+
+function isTurnTimeoutMove(move: unknown): move is TurnTimeoutMove {
+  return (
+    isRecord(move) &&
+    move.t === "turnTimeout" &&
+    typeof move.day === "number" &&
+    typeof move.seat === "number"
+  );
+}
+
+function isVoteTimeoutMove(move: unknown): move is VoteTimeoutMove {
+  return (
+    isRecord(move) && move.t === "voteTimeout" && typeof move.day === "number"
   );
 }
 
@@ -516,6 +662,9 @@ export interface NightReport {
   killed: PlayerIndex | null;
   /** Cops' cell target, or null if they cast no votes. */
   celled: PlayerIndex | null;
+  /** Whom a doctor pulled out of the murderers' hands this round, if anyone.
+   * Non-null means `killed` is null *because* of this save. */
+  saved: PlayerIndex | null;
   /** Who that day's opening jail vote removed, if any — repeated here so one
    * report covers everything that happened over the whole day. */
   jailed: PlayerIndex | null;
@@ -525,6 +674,10 @@ export interface KatilKimState {
   /** Kept so tie-breaks stay a pure function of state. */
   seed: number;
   playerCount: number;
+  /** Shot clock per seat during the turn-based day. */
+  turnSeconds: number;
+  /** Shot clock for the whole simultaneous jail vote. */
+  voteSeconds: number;
   roles: readonly Role[];
   /** Seats in speaking order — a seed-fixed permutation, not sorted. */
   order: readonly PlayerIndex[];
@@ -539,6 +692,9 @@ export interface KatilKimState {
   acted: readonly boolean[];
   killVotes: readonly (PlayerIndex | null)[];
   cellVotes: readonly (PlayerIndex | null)[];
+  /** Per seat: who that doctor shielded this round. Cleared every new day —
+   * a save never carries into a later night. */
+  protects: readonly (PlayerIndex | null)[];
   findings: readonly Finding[];
   /** Non-null only during `night` — the report currently on screen. */
   night: NightReport | null;
@@ -565,11 +721,27 @@ interface InvestigateMove {
   t: "investigate";
   target: PlayerIndex;
 }
+interface ProtectMove {
+  t: "protect";
+  target: PlayerIndex;
+}
 interface PassMove {
   t: "pass";
 }
 interface AdvanceNightMove {
   t: "advanceNight";
+  day: number;
+}
+/** Skips the seat currently on the clock. Names the seat so every client can
+ * fire it at once without double-skipping. */
+interface TurnTimeoutMove {
+  t: "turnTimeout";
+  day: number;
+  seat: PlayerIndex;
+}
+/** Closes the jail vote, abstaining for anyone who never voted. */
+interface VoteTimeoutMove {
+  t: "voteTimeout";
   day: number;
 }
 
@@ -578,5 +750,8 @@ export type KatilKimMove =
   | KillVoteMove
   | CellVoteMove
   | InvestigateMove
+  | ProtectMove
   | PassMove
-  | AdvanceNightMove;
+  | AdvanceNightMove
+  | TurnTimeoutMove
+  | VoteTimeoutMove;

@@ -110,14 +110,14 @@ describe("win detection", () => {
   for (const line of WIN_LINES) {
     it(`finds X's win on line ${line.join("-")}`, () => {
       const state = play(sequenceForLine(line));
-      expect(xoxGame.status(state)).toEqual({ kind: "won", winner: 0 });
+      expect(xoxGame.status(state)).toEqual({ kind: "won", winners: [0] });
       expect(xoxGame.turn(state)).toBeNull();
     });
   }
 
   it("finds O's win too", () => {
     const state = play([1, 0, 2, 4, 5, 8]); // O takes the 0-4-8 diagonal
-    expect(xoxGame.status(state)).toEqual({ kind: "won", winner: 1 });
+    expect(xoxGame.status(state)).toEqual({ kind: "won", winners: [1] });
     expect(xoxGame.turn(state)).toBeNull();
   });
 
@@ -136,7 +136,7 @@ describe("draw", () => {
   it("reports the winner, not a draw, when the last cell wins", () => {
     const state = play([0, 3, 1, 4, 5, 8, 6, 7, 2]); // X completes 0-1-2 on move 9
     expect(state.board.every((mark) => mark !== null)).toBe(true);
-    expect(xoxGame.status(state)).toEqual({ kind: "won", winner: 0 });
+    expect(xoxGame.status(state)).toEqual({ kind: "won", winners: [0] });
   });
 });
 

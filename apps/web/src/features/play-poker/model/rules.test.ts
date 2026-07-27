@@ -273,7 +273,10 @@ describe("all-in, elimination, and match-over", () => {
     expect(s.eliminated.filter((e) => !e)).toHaveLength(1);
     const status = pokerGame.status(s);
     expect(status.kind).toBe("won");
-    if (status.kind === "won") expect(s.eliminated[status.winner]).toBe(false);
+    if (status.kind === "won") {
+      expect(status.winners).toHaveLength(1);
+      expect(s.eliminated[status.winners[0]]).toBe(false);
+    }
   });
 
   it("reports a draw if every seat were somehow eliminated (defensive, unreachable in real play)", () => {

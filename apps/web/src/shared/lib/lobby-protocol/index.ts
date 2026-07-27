@@ -42,6 +42,8 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
     }
     case "rematch":
       return { t: "rematch" };
+    case "open-settings":
+      return { t: "open-settings" };
     case "chat": {
       const text = value.text;
       if (typeof text !== "string") return null;
@@ -64,7 +66,9 @@ export function parseServerMessage(value: unknown): ServerMessage | null {
       const gameId = value.gameId;
       if (members === null || typeof youId !== "string") return null;
       if (gameId !== null && typeof gameId !== "string") return null;
-      return { t: "roster", members, youId, gameId: gameId ?? null };
+      return value.reopen === true
+        ? { t: "roster", members, youId, gameId: gameId ?? null, reopen: true }
+        : { t: "roster", members, youId, gameId: gameId ?? null };
     }
     case "start": {
       const names = parseNameList(value.names);
@@ -89,7 +93,12 @@ export function parseServerMessage(value: unknown): ServerMessage | null {
         ? { t: "rematch-start", seed: value.seed }
         : null;
     case "peer-left":
-      return { t: "peer-left" };
+      // `name` is optional on the wire: a room server that predates it still
+      // sends a bare frame, and "somebody left" is strictly better than
+      // dropping the message. The UI falls back to impersonal copy.
+      return typeof value.name === "string" && value.name !== ""
+        ? { t: "peer-left", name: value.name }
+        : { t: "peer-left" };
     case "chat": {
       const from = value.from;
       const fromName = value.fromName;
@@ -209,6 +218,11 @@ export type ClientMessage =
    * (`{}` for a game with none) — the room just relays it in `start`. */
   | { t: "start-match"; settings: Record<string, number> }
   | { t: "rematch" }
+  /** Host-only: drop the room back to the pre-game arrange/settings screen
+   * WITHOUT changing the pick, so the host can retune a game's settings
+   * without the round-trip of clearing the game and choosing it again. Ends
+   * the current match, since settings are consumed by `game.init`. */
+  | { t: "open-settings" }
   /** Free-text room chat — allowed from anyone, in any phase; the DO just
    * relays it, same as a peer move. Trimmed and capped at
    * `CHAT_MAX_LENGTH` client-side (and re-validated on the way back). */
@@ -223,6 +237,12 @@ export type ServerMessage =
       youId: string;
       /** The host's current pick, or null before anyone has chosen one. */
       gameId: string | null;
+      /** Set only by `open-settings`: "go back to the arrange screen even
+       * though the pick didn't change". Clients mid-match normally ignore a
+       * roster whose `gameId` matches what they're already playing (that's
+       * how a join/leave avoids interrupting a live match), so reopening
+       * settings needs this explicit override to get through. */
+      reopen?: boolean;
     }
   | {
       t: "start";
@@ -238,7 +258,8 @@ export type ServerMessage =
     }
   | { t: "peer-move"; payload: unknown; from: number }
   | { t: "rematch-start"; seed: number }
-  | { t: "peer-left" }
+  /** `name` is who left. Absent only from a server older than the field. */
+  | { t: "peer-left"; name?: string }
   /** Relayed to everyone, including the sender — every client renders chat
    * from this single stream rather than echoing its own text locally. */
   | { t: "chat"; from: string; fromName: string; text: string; ts: number }
